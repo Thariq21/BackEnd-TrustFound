@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+package-lock.json # Opsional: Hapus baris ini jika Anda ingin mengunci versi dependency di repo
+
+# Environment Variables (SANGAT PENTING: Jangan di-upload!)
+.env
+config/config.env
+config/.env
+*.env
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Editor Directories
+.vscode/
+.idea/
+
+# Uploaded Files
+# Kita ingin folder 'public/uploads' ada, tapi isinya jangan di-upload
+public/uploads/*
+!public/uploads/.gitkeep
