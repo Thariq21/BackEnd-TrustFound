@@ -80,10 +80,20 @@ const Claim = {
 
     // ... (fungsi findByClaimerNim tetap sama untuk mahasiswa) ...
     findByClaimerNim: async (claimerNim) => {
+        // Kita tambahkan:
+        // 1. i.found_location (Lokasi)
+        // 2. cat.name (Nama Kategori) dengan JOIN ke tabel category
         const query = `
-            SELECT c.*, i.name as item_name, i.image_path, i.status as item_status
+            SELECT 
+                c.*, 
+                i.name as item_name, 
+                i.image_path, 
+                i.status as item_status,
+                i.found_location,
+                cat.name as category_name
             FROM claim c
             JOIN item i ON c.item_id = i.item_id
+            LEFT JOIN category cat ON i.category_id = cat.category_id
             WHERE c.claimer_nim = ?
             ORDER BY c.create_at DESC
         `;
