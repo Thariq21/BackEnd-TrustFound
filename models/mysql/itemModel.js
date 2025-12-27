@@ -1,9 +1,9 @@
 import db from '../../config/db_mysql.js';
 
-// ... (kode sebelumnya tetap ada)
+
 
 const Item = {
-    // ... (fungsi findAllAdmin, findById, create, updateStatus, updateDetails tetap sama) ...
+    
 
     // UPDATE: Fungsi findAll sekarang menerima parameter filters
     findAll: async (status = 'pending', filters = {}) => {
@@ -109,6 +109,30 @@ const Item = {
         const [result] = await db.execute(query, [
             finder_nim, category_id, name, description, 
             found_location, is_sensitive, found_date, image_path
+        ]);
+        return result;
+    },
+
+    createByAdmin: async (itemData) => {
+        const { 
+            category_id, name, description, 
+            found_location, is_sensitive, found_date, image_path, manage_nip 
+        } = itemData;
+
+        // Note: finder_nim di-set NULL karena admin yang menemukan/input
+        // Status langsung 'secured'
+        // manage_nip langsung terisi oleh admin yang login
+        const query = `
+            INSERT INTO item (
+                finder_nim, category_id, name, description, 
+                found_location, is_sensitive, found_date, image_path, status, manage_nip
+            )
+            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, 'secured', ?)
+        `;
+        
+        const [result] = await db.execute(query, [
+            category_id, name, description, 
+            found_location, is_sensitive, found_date, image_path, manage_nip
         ]);
         return result;
     },

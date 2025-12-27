@@ -1,5 +1,6 @@
 import Item from '../models/mysql/itemModel.js';
 import Claim from '../models/mysql/claimModel.js';
+import Category from '../models/mysql/categoryModel.js';
 import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
@@ -119,6 +120,72 @@ export const secureItem = async (req, res) => {
         // --------------------
         
         res.json({ status: 'success', message: 'Item marked as secured. Sensitivity updated.' });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ status: 'error', message: 'Server Error' });
+    }
+};
+
+// --- BARU: Admin Upload Item Langsung ---
+export const createItemAdmin = async (req, res) => {
+    try {
+        const { category_id, name, description, found_location, found_date } = req.body;
+        const file = req.file;
+
+        if (!file) {
+            return res.status(400).json({ status: 'error', message: 'Please upload an image' });
+        }
+
+        const category = await Category.findById(category_id);
+        if (!category) {
+            return res.status(400).json({ status: 'error', message: 'Invalid category ID' });
+        }
+
+        const isSensitiveBool = category.default_sensitive === 1;
+        let finalImagePath = `public/uploads/${file.filename}`;
+
+        // Logic Auto-Blur tetap dijalankan jika kategori sensitif
+        if (isSensitiveBool) {
+            const blurredFilename = `blur-${file.filename}`;
+            const blurredPath = `public/uploads/${blurredFilename}`;
+            
+            await sharp(file.path)
+                .resize(500)
+                .blur(20)
+                .toFile(blurredPath);
+            
+            finalImagePath = blurredPath;
+        }
+
+        const newItem = {
+            manage_nip: req.user.id, // Admin yang login
+            category_id,
+            name,
+            description,
+            found_location,
+            is_sensitive: isSensitiveBool ? 1 : 0,
+            found_date,
+            image_path: finalImagePath
+        };
+
+        // Panggil Model Khusus Admin
+        const result = await Item.createByAdmin(newItem);
+
+        // --- LOG ACTIVITY ---
+        logActivity(
+            { id: req.user.id, role: req.user.role, name: 'Admin' },
+            'CREATE_ITEM_SECURED',
+            { entity: 'Item', entityId: result.insertId, details: `Admin uploaded: ${name}` },
+            req
+        );
+        // --------------------
+
+        res.status(201).json({
+            status: 'success',
+            message: 'Item uploaded and secured successfully by Admin',
+            data: { item_id: result.insertId, ...newItem, status: 'secured' }
+        });
 
     } catch (error) {
         console.error(error);
