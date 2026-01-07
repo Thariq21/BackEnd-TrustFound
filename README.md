@@ -134,12 +134,17 @@ trustfound-backend/
 | `GET` | `/api/admin/claims` | Lihat daftar klaim masuk | Admin |
 | `PUT` | `/api/admin/claims/:id/process` | Setujui/Tolak klaim | Admin |
 | `GET` | `/api/admin/logs` | Lihat Log Aktivitas Sistem | Admin |
+| `POST` | `/api/admin/items` | Lapor barang temuan (Upload Foto) | Admin |
+| `GET` | `/api/admin/reports/monthly` | Download Laporan Bulanan | Admin |
 
 **Filter pada `GET /api/admin/claims`:**
-
 * `?status=pending` (Default: yang perlu diproses)
 * `?status=all` (Semua history)
 * `?status=verified` (Yang disetujui)
+
+**Filter pada `GET /api/admin/reports/monthly`:**
+* Default: Akan mengambil 1 bulan dari bulan sekarang
+* `startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` (Tentukan Range tanggal)
 
 ---
 
