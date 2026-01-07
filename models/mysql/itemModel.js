@@ -113,6 +113,21 @@ const Item = {
         return result;
     },
 
+    // --- FITUR BARU: Auto Donate ---
+    archiveOldItems: async () => {
+        // Query untuk mengubah status 'secured' menjadi 'donated'
+        // Jika found_date lebih lama dari 14 hari yang lalu
+        const query = `
+            UPDATE item 
+            SET status = 'donated' 
+            WHERE status = 'secured' 
+            AND found_date < DATE_SUB(NOW(), INTERVAL 14 DAY)
+        `;
+        
+        const [result] = await db.execute(query);
+        return result.affectedRows; // Mengembalikan jumlah baris yang diupdate
+    },
+
     createByAdmin: async (itemData) => {
         const { 
             category_id, name, description, 

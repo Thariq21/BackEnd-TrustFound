@@ -10,11 +10,14 @@
     "mongoose": "^9.0.1",
     "multer": "^2.0.2",
     "mysql2": "^3.15.3",
+    "node-cron": "^4.2.1",
+    "pdfkit": "^0.17.2",
+    "pdfkit-table": "^0.1.99",
     "sharp": "^0.34.5"
   },
   "name": "trustfound-backend",
   "version": "1.0.0",
-  "module": "type",
+  "type": "module",
   "main": "app.js",
   "devDependencies": {
     "nodemon": "^3.1.11"

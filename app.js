@@ -15,6 +15,9 @@ import claimRoutes from './routes/claimRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 
+// --- IMPORT CRON JOB ---
+import initCronJobs from './services/cronService.js'; 
+
 // Load env vars
 dotenv.config({ path: './config/config.env' });
 
@@ -73,4 +76,6 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
     console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+
+    initCronJobs();
 });

@@ -10,6 +10,7 @@ import { getLogs } from '../controllers/logController.js';
 import { protect, adminOnly } from '../middleware/authMiddleware.js';
 import upload from '../middleware/uploadMiddleware.js'; // Import upload handler
 import { validate, itemValidation } from '../middleware/validation.js'; // Import validator
+import { generateMonthlyReport } from '../controllers/reportController.js'; //
 
 const router = express.Router();
 
@@ -40,5 +41,10 @@ router.put('/claims/:id/process', processClaim);
 
 // --- Logs ---
 router.get('/logs', getLogs);
+
+// --- Reports ---
+// Endpoint untuk download laporan bulanan (PDF)
+// Query params: ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+router.get('/reports/monthly', generateMonthlyReport);
 
 export default router;
