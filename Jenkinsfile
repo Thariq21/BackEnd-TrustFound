@@ -4,7 +4,7 @@ pipeline {
     environment {
         NAMESPACE = 'trustfound'
         APP_NAME = 'trustfound-backend'
-        GITHUB_CREDENTIALS_ID = 'github-token-auth'
+        GITHUB_CREDENTIALS_ID = 'cred-github-thariq'
     }
 
     stages {
