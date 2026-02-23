@@ -1,0 +1,35 @@
+# Mengabaikan folder dependency lokal
+node_modules/
+venv/
+.venv/
+vendor/
+
+# Mengabaikan file hasil build/kompilasi
+dist/
+build/
+*.o
+*.out
+
+# Mengabaikan file lingkungan dan kredensial (PENTING!)
+.env
+.env.local
+*.secret
+*.key
+.aws/
+.kube/
+
+# Mengabaikan file sistem kontrol versi
+.git
+.gitignore
+
+# Mengabaikan file IDE/Editor
+.vscode/
+.idea/
+*.DS_Store
+
+# Mengabaikan log dan dokumen
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+README.md
+docs/
