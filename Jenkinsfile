@@ -31,7 +31,7 @@ pipeline {
             steps {
                 script {
                     echo "--- Memicu Rollout Deployment terbaru ---"
-                    sh "oc rollout latest deployment/${APP_NAME} -n ${NAMESPACE}"
+                    sh "oc rollout restart deployment/${APP_NAME} -n ${NAMESPACE}"
                     
                     echo "--- Menunggu status Pod Ready ---"
                     sh "oc rollout status deployment/${APP_NAME} -n ${NAMESPACE}"
