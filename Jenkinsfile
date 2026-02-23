@@ -12,7 +12,7 @@ pipeline {
             steps {
                 // Mengambil kode terbaru dari GitHub
                 git credentialsId: "${GITHUB_CREDENTIALS_ID}", 
-                    url: 'https://github.com/thariqrahman/backend-trustfound.git', 
+                    url: 'https://github.com/Thariq21/BackEnd-TrustFound.git', 
                     branch: 'main'
             }
         }
