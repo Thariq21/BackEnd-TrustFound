@@ -32,13 +32,12 @@ const Claim = {
     // Mendapatkan detail klaim berdasarkan ID
     findById: async (id) => {
         const query = `
-            SELECT c.*, i.name as item_name, u.full_name as claimer_name, u.email as claimer_email
+            SELECT c.*, i.name as item_name, i.image_path as item_image_path, u.full_name as claimer_name, u.email as claimer_email
             FROM claim c
             JOIN item i ON c.item_id = i.item_id
             JOIN general_user u ON c.claimer_nim = u.nim
             WHERE c.claim_id = ?
-        `;
-        const [rows] = await db.execute(query, [id]);
+        `;        const [rows] = await db.execute(query, [id]);
         return rows[0];
     },
 

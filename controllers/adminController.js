@@ -123,8 +123,9 @@ export const secureItem = async (req, res) => {
         // --- ASYNC EMAIL BROADCAST ---
         try {
             const allEmails = await User.findAllEmails();
-            // Using item.name because we fetched it earlier
-            broadcastNewItemAsync(itemId, item.name, allEmails);
+            // Fetch updated item to get the correct image path (blurred or clear)
+            const updatedItem = await Item.findById(itemId);
+            broadcastNewItemAsync(itemId, item.name, allEmails, updatedItem ? updatedItem.image_path : null);
         } catch (err) {
             console.error('Failed to trigger broadcast email', err);
         }
@@ -195,7 +196,7 @@ export const createItemAdmin = async (req, res) => {
         // --- ASYNC EMAIL BROADCAST ---
         try {
             const allEmails = await User.findAllEmails();
-            broadcastNewItemAsync(result.insertId, name, allEmails);
+            broadcastNewItemAsync(result.insertId, name, allEmails, newItem.image_path);
         } catch (err) {
             console.error('Failed to trigger broadcast email', err);
         }
@@ -260,7 +261,7 @@ export const processClaim = async (req, res) => {
         try {
             const claim = await Claim.findById(claimId);
             if (claim && claim.claimer_email) {
-                sendClaimDecisionEmailAsync(claim.claimer_email, claimId, claim.item_name, status);
+                sendClaimDecisionEmailAsync(claim.claimer_email, claimId, claim.item_name, status, claim.item_image_path);
             }
         } catch (e) {
             console.error('Failed to trigger email', e);

@@ -20,7 +20,7 @@ export const broadcastNewItem = async (req, res) => {
         }
 
         // Trigger Async Email (Fire and forget)
-        broadcastNewItemAsync(emails, itemDetails);
+        broadcastNewItemAsync(itemDetails.item_id || '-', itemDetails.name, emails, itemDetails.image_path);
 
         res.status(202).json({
             status: 'success',

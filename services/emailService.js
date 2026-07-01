@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import dbMongo from '../config/db_mongo.js';
 import dotenv from 'dotenv';
-
+import { baseEmailTemplate } from './emailTemplates.js';
 dotenv.config({ path: './config/config.env' });
 
 // Create reusable transporter object using the default SMTP transport
@@ -58,12 +58,17 @@ const sendEmailAsync = async (mailOptions, eventType) => {
  * Sends an email to a user when their claim is submitted.
  * Implemented using Fire-and-Forget pattern.
  */
-export const sendClaimPendingEmailAsync = (userEmail, claimId, itemName) => {
+export const sendClaimPendingEmailAsync = (userEmail, claimId, itemName, imagePath = null) => {
+    const textMessage = `Your claim for ${itemName} has been submitted and is pending review. Please wait for further updates from the admin.`;
+    const filename = imagePath ? imagePath.split(/[\/\\]/).pop() : null;
+    const fullImageUrl = filename ? `${process.env.SERVER_BASE_URL || 'http://localhost:5000'}/uploads/${filename}` : null;
+    
     const mailOptions = {
         from: `"TrustFound System" <${process.env.SMTP_USER}>`,
         to: userEmail,
         subject: `Claim Submitted: ${itemName}`,
-        text: `Your claim for item ID ${claimId} (${itemName}) has been submitted and is pending review. Please wait for further updates from the admin.`
+        text: textMessage,
+        html: baseEmailTemplate(`Claim Submitted: ${itemName}`, textMessage, fullImageUrl)
     };
     
     // Fire and forget, no await
@@ -74,17 +79,21 @@ export const sendClaimPendingEmailAsync = (userEmail, claimId, itemName) => {
  * Sends an email to a user when an admin makes a decision (Approved/Rejected) on their claim.
  * Implemented using Fire-and-Forget pattern.
  */
-export const sendClaimDecisionEmailAsync = (userEmail, claimId, itemName, decision) => {
-    let textMessage = `Your claim for item ID ${claimId} (${itemName}) has been ${decision.toUpperCase()}.`;
+export const sendClaimDecisionEmailAsync = (userEmail, claimId, itemName, decision, imagePath = null) => {
+    let textMessage = `Your claim for ${itemName} has been ${decision.toUpperCase()}.`;
     if (decision.toLowerCase() === 'verified') {
         textMessage += `\n\nPlease immediately generate a QR token in the TrustFound application to pick up your item at the security post.`;
     }
+
+    const filename = imagePath ? imagePath.split(/[\/\\]/).pop() : null;
+    const fullImageUrl = filename ? `${process.env.SERVER_BASE_URL || 'http://localhost:5000'}/uploads/${filename}` : null;
 
     const mailOptions = {
         from: `"TrustFound System" <${process.env.SMTP_USER}>`,
         to: userEmail,
         subject: `Claim ${decision}: ${itemName}`,
-        text: textMessage
+        text: textMessage,
+        html: baseEmailTemplate(`Claim ${decision}: ${itemName}`, textMessage, fullImageUrl)
     };
     
     // Fire and forget, no await
@@ -95,14 +104,19 @@ export const sendClaimDecisionEmailAsync = (userEmail, claimId, itemName, decisi
  * Broadcasts an email to all users when a new item is found.
  * Implemented using Fire-and-Forget pattern.
  */
-export const broadcastNewItemAsync = (itemId, itemName, allUserEmailsArray) => {
+export const broadcastNewItemAsync = (itemId, itemName, allUserEmailsArray, imagePath = null) => {
     if (!allUserEmailsArray || allUserEmailsArray.length === 0) return;
+
+    const textMessage = `A new item has been found and secured at the security post.\n\nDetails:\nName: ${itemName}\n\nIf this is yours, please claim it via the TrustFound system.`;
+    const filename = imagePath ? imagePath.split(/[\/\\]/).pop() : null;
+    const fullImageUrl = filename ? `${process.env.SERVER_BASE_URL || 'http://localhost:5000'}/uploads/${filename}` : null;
 
     const mailOptions = {
         from: `"TrustFound System" <${process.env.SMTP_USER}>`,
         to: allUserEmailsArray, // Sending to all users explicitly in the 'to' field
         subject: `New Found Item: ${itemName}`,
-        text: `A new item has been found and secured at the security post.\n\nDetails:\nItem ID: ${itemId}\nName: ${itemName}\n\nIf this is yours, please claim it via the TrustFound system.`
+        text: textMessage,
+        html: baseEmailTemplate(`New Found Item: ${itemName}`, textMessage, fullImageUrl)
     };
     
     // Fire and forget, no await
@@ -118,7 +132,7 @@ export const sendHandoverReceiptEmailAsync = (userEmail, claimId, itemName) => {
         from: `"TrustFound System" <${process.env.SMTP_USER}>`,
         to: userEmail,
         subject: `Item Handover Receipt: ${itemName}`,
-        text: `You have successfully received the item ID ${claimId} (${itemName}). Thank you for using TrustFound.`
+        text: `You have successfully received the item ${itemName}. Thank you for using TrustFound.`
     };
     
     // Fire and forget, no await

@@ -71,7 +71,7 @@ export const createClaim = async (req, res) => {
         try {
             const user = await User.findByNim(req.user.id);
             if (user && user.email) {
-                sendClaimPendingEmailAsync(user.email, result.insertId, item.name);
+                sendClaimPendingEmailAsync(user.email, result.insertId, item.name, item.image_path);
             }
         } catch (e) {
             console.error('Failed to trigger email', e);
