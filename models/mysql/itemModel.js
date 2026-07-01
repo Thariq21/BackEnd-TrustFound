@@ -115,13 +115,14 @@ const Item = {
 
     // --- FITUR BARU: Auto Donate ---
     archiveOldItems: async () => {
-        // Query untuk mengubah status 'secured' menjadi 'donated'
-        // Jika found_date lebih lama dari 14 hari yang lalu
+        // Find items older than 90 days, status pending/secured, with no active claims (pending/verified)
         const query = `
-            UPDATE item 
-            SET status = 'donated' 
-            WHERE status = 'secured' 
-            AND found_date < DATE_SUB(NOW(), INTERVAL 14 DAY)
+            UPDATE item i
+            LEFT JOIN claim c ON i.item_id = c.item_id AND c.status IN ('pending', 'verified')
+            SET i.status = 'donated'
+            WHERE i.status IN ('pending', 'secured')
+            AND i.found_date < DATE_SUB(NOW(), INTERVAL 90 DAY)
+            AND c.claim_id IS NULL
         `;
         
         const [result] = await db.execute(query);

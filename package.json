@@ -11,6 +11,7 @@
     "multer": "^2.0.2",
     "mysql2": "^3.15.3",
     "node-cron": "^4.2.1",
+    "nodemailer": "^9.0.1",
     "pdfkit": "^0.17.2",
     "pdfkit-table": "^0.1.99",
     "sharp": "^0.34.5"
@@ -20,6 +21,8 @@
   "type": "module",
   "main": "app.js",
   "devDependencies": {
+    "axios": "^1.18.1",
+    "form-data": "^4.0.6",
     "nodemon": "^3.1.11"
   },
   "scripts": {

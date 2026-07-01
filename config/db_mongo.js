@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load env vars dengan path absolut
-dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config({ path: path.join(__dirname, 'config.env') });
 
 const uri = process.env.MONGO_URI;
 const dbName = process.env.MONGO_DB_NAME;

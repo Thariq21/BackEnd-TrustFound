@@ -14,6 +14,8 @@ import itemRoutes from './routes/itemRoutes.js';
 import claimRoutes from './routes/claimRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
+import claimV2Routes from './routes/claimV2Routes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 
 // --- IMPORT CRON JOB ---
 import initCronJobs from './services/cronService.js'; 
@@ -46,6 +48,10 @@ app.use('/api/items', itemRoutes);
 app.use('/api/claims', claimRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/categories', categoryRoutes);
+
+// --- V2 Routes ---
+app.use('/api/v2/claims', claimV2Routes);
+app.use('/api/v2/notifications', notificationRoutes);
 
 // --- Default Route (Health Check) ---
 app.get('/', (req, res) => {

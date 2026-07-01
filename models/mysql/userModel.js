@@ -22,6 +22,12 @@ const User = {
         `;
         const [result] = await db.execute(query, [nim, univ_id, full_name, email, phone_number, password, status]);
         return result;
+    },
+
+    // Mendapatkan semua email user (untuk broadcast)
+    findAllEmails: async () => {
+        const [rows] = await db.execute('SELECT email FROM general_user WHERE email IS NOT NULL');
+        return rows.map(row => row.email);
     }
 };
 

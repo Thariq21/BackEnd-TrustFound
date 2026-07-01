@@ -32,7 +32,7 @@ const Claim = {
     // Mendapatkan detail klaim berdasarkan ID
     findById: async (id) => {
         const query = `
-            SELECT c.*, i.name as item_name, u.full_name as claimer_name 
+            SELECT c.*, i.name as item_name, u.full_name as claimer_name, u.email as claimer_email
             FROM claim c
             JOIN item i ON c.item_id = i.item_id
             JOIN general_user u ON c.claimer_nim = u.nim
@@ -111,6 +111,60 @@ const Claim = {
         `;
         const [result] = await db.execute(query, [newStatus, processedAt, validatorNip, claimId]);
         return result;
+    },
+
+    // Generate QR Token
+    generateQR: async (claimId, token, expiresAt) => {
+        const query = `
+            UPDATE claim 
+            SET qr_token = ?, qr_expires_at = ?
+            WHERE claim_id = ?
+        `;
+        const [result] = await db.execute(query, [token, expiresAt, claimId]);
+        return result;
+    },
+
+    // Find Claim by QR Token
+    findByQRToken: async (token) => {
+        const query = `
+            SELECT c.*, i.name as item_name, i.status as item_status, u.email as claimer_email
+            FROM claim c
+            JOIN item i ON c.item_id = i.item_id
+            JOIN general_user u ON c.claimer_nim = u.nim
+            WHERE c.qr_token = ?
+        `;
+        const [rows] = await db.execute(query, [token]);
+        return rows[0];
+    },
+
+    // Validate QR and Claim Item (Atomic Transaction)
+    validateQRAndClaimItem: async (claimId, itemId) => {
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            const processedAt = new Date();
+
+            // 1. Update item status to 'claimed'
+            const updateItemQuery = `UPDATE item SET status = 'claimed' WHERE item_id = ?`;
+            await connection.execute(updateItemQuery, [itemId]);
+
+            // 2. Update claim status to 'claimed', nullify qr_token
+            const updateClaimQuery = `
+                UPDATE claim 
+                SET status = 'claimed', processed_at = ?, qr_token = NULL, qr_expires_at = NULL
+                WHERE claim_id = ?
+            `;
+            await connection.execute(updateClaimQuery, [processedAt, claimId]);
+
+            await connection.commit();
+            return true;
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
     }
 };
 

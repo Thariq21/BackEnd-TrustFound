@@ -6,7 +6,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { logActivity } from '../utils/logger.js'; 
-
+import { sendClaimDecisionEmailAsync, broadcastNewItemAsync } from '../services/emailService.js'; 
+import User from '../models/mysql/userModel.js';
 // Setup __dirname untuk ES Module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -119,6 +120,16 @@ export const secureItem = async (req, res) => {
         );
         // --------------------
         
+        // --- ASYNC EMAIL BROADCAST ---
+        try {
+            const allEmails = await User.findAllEmails();
+            // Using item.name because we fetched it earlier
+            broadcastNewItemAsync(itemId, item.name, allEmails);
+        } catch (err) {
+            console.error('Failed to trigger broadcast email', err);
+        }
+        // -----------------------------
+        
         res.json({ status: 'success', message: 'Item marked as secured. Sensitivity updated.' });
 
     } catch (error) {
@@ -181,6 +192,15 @@ export const createItemAdmin = async (req, res) => {
         );
         // --------------------
 
+        // --- ASYNC EMAIL BROADCAST ---
+        try {
+            const allEmails = await User.findAllEmails();
+            broadcastNewItemAsync(result.insertId, name, allEmails);
+        } catch (err) {
+            console.error('Failed to trigger broadcast email', err);
+        }
+        // -----------------------------
+
         res.status(201).json({
             status: 'success',
             message: 'Item uploaded and secured successfully by Admin',
@@ -225,12 +245,7 @@ export const processClaim = async (req, res) => {
     try {
         await Claim.updateStatus(claimId, status, req.user.id);
 
-        if (status === 'verified') {
-            const claim = await Claim.findById(claimId);
-            if (claim) {
-                await Item.updateStatus(claim.item_id, 'claimed', req.user.id);
-            }
-        }
+        // removed premature Item.updateStatus(..., 'claimed') because item should only be 'claimed' when QR is validated
 
          // --- LOG ACTIVITY ---
         logActivity(
@@ -240,6 +255,16 @@ export const processClaim = async (req, res) => {
             req
         );
         // --------------------
+
+        // --- ASYNC EMAIL ---
+        try {
+            const claim = await Claim.findById(claimId);
+            if (claim && claim.claimer_email) {
+                sendClaimDecisionEmailAsync(claim.claimer_email, claimId, claim.item_name, status);
+            }
+        } catch (e) {
+            console.error('Failed to trigger email', e);
+        }
 
         res.json({ status: 'success', message: `Claim ${status} successfully` });
 

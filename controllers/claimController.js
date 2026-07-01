@@ -1,6 +1,8 @@
 import Claim from '../models/mysql/claimModel.js';
 import Item from '../models/mysql/itemModel.js';
+import User from '../models/mysql/userModel.js';
 import { logActivity } from '../utils/logger.js';
+import { sendClaimPendingEmailAsync } from '../services/emailService.js';
 
 // @desc    Create a claim for an item
 // @route   POST /api/claims
@@ -65,9 +67,20 @@ export const createClaim = async (req, res) => {
         );
         // ------------------------------------
 
+        // 3. --- ASYNC EMAIL ---
+        try {
+            const user = await User.findByNim(req.user.id);
+            if (user && user.email) {
+                sendClaimPendingEmailAsync(user.email, result.insertId, item.name);
+            }
+        } catch (e) {
+            console.error('Failed to trigger email', e);
+        }
+
         res.status(201).json({
             status: 'success',
-            message: 'Claim submitted successfully. Please visit the security post for verification.'
+            message: 'Claim submitted successfully. Please visit the security post for verification.',
+            data: { claim_id: result.insertId }
         });
 
     } catch (error) {
