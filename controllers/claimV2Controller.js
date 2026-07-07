@@ -26,13 +26,29 @@ export const getQRToken = async (req, res) => {
             return res.status(400).json({ status: 'error', message: 'QR token can only be generated for verified claims' });
         }
 
+        // Check if existing token is still valid
+        if (claim.qr_token && claim.qr_expires_at) {
+            const now = new Date();
+            if (new Date(claim.qr_expires_at) > now) {
+                return res.status(200).json({
+                    status: 'success',
+                    data: {
+                        qr_token: claim.qr_token,
+                        expires_at: claim.qr_expires_at,
+                        time_to_live_seconds: Math.floor((new Date(claim.qr_expires_at) - now) / 1000)
+                    }
+                });
+            }
+        }
+
         // Generate token and expiration
         const qr_token = crypto.randomBytes(32).toString('hex');
         const issued_at = new Date();
         const expires_at = new Date(issued_at.getTime() + 24 * 60 * 60 * 1000); // +24 hours
+        const expires_at_formatted = expires_at.toISOString().slice(0, 19).replace('T', ' ');
 
         // Update database
-        await Claim.generateQR(claim_id, qr_token, expires_at);
+        await Claim.generateQR(claim_id, qr_token, expires_at_formatted);
 
         // Log to MongoDB
         try {
