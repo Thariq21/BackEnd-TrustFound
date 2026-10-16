@@ -2,7 +2,9 @@ import express from 'express';
 import { 
     getAllItemsAdmin, 
     secureItem, 
-    createItemAdmin, // Import controller baru
+    createItemAdmin,
+    batchSecureItems,
+    getDashboardStats,
     getClaimsAdmin,
     processClaim 
 } from '../controllers/adminController.js';
@@ -17,10 +19,16 @@ const router = express.Router();
 router.use(protect);
 router.use(adminOnly);
 
+// --- Dashboard Statistics (FR-08) ---
+router.get('/dashboard/stats', getDashboardStats);
+
 // --- Items Management ---
 
 // 1. Get All Items (Dashboard)
 router.get('/items', getAllItemsAdmin);
+
+// 2. Batch Secure Items (Move from Pos Satpam to Glass Cabinet) (FR-07)
+router.put('/items/batch-secure', batchSecureItems);
 
 // 2. Admin Upload Item (Langsung Secured)
 // Menggunakan itemValidation yang sama dengan user karena field-nya mirip (name, desc, location, dll)

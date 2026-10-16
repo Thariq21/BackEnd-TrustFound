@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { logActivity } from '../utils/logger.js'; 
 import { sendClaimDecisionEmailAsync, broadcastNewItemAsync } from '../services/emailService.js'; 
 import User from '../models/mysql/userModel.js';
+import ActivityLog from '../models/mongo/activityLog.js';
 // Setup __dirname untuk ES Module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -274,3 +275,67 @@ export const processClaim = async (req, res) => {
         res.status(500).json({ status: 'error', message: 'Server Error' });
     }
 };
+
+// @desc    Batch move items from Pos Satpam to Glass Cabinet (Tersedia di Lemari) (FR-07)
+// @route   PUT /api/admin/items/batch-secure
+// @access  Private (Admin)
+export const batchSecureItems = async (req, res) => {
+    try {
+        const { item_ids } = req.body || {};
+
+        const affectedRows = await Item.batchUpdateStatus(item_ids, 'secured', req.user.id);
+
+        // Log Activity
+        logActivity(
+            { id: req.user.id, role: 'admin', name: 'Admin BEM' },
+            'BATCH_SECURE_ITEMS',
+            {
+                entity: 'Item',
+                details: `Moved ${affectedRows} items from Pos Satpam to Glass Cabinet (Tersedia di Lemari)`
+            },
+            req,
+            { item_ids: item_ids || 'all_pending', affected_rows: affectedRows }
+        );
+
+        res.status(200).json({
+            status: 'success',
+            message: `Successfully moved ${affectedRows} item(s) to Tersedia di Lemari.`,
+            data: {
+                affected_rows: affectedRows
+            }
+        });
+    } catch (error) {
+        console.error('Error in batch securing items:', error);
+        res.status(500).json({ status: 'error', message: 'Server Error' });
+    }
+};
+
+// @desc    Get dashboard metrics and statistics for Admin BEM (FR-08)
+// @route   GET /api/admin/dashboard/stats
+// @access  Private (Admin)
+export const getDashboardStats = async (req, res) => {
+    try {
+        const itemStats = await Item.getDashboardItemStats();
+        const claimStats = await Claim.getDashboardClaimStats();
+        
+        let recentLogs = [];
+        try {
+            recentLogs = await ActivityLog.find({}, { limit: 10, sort: { timestamp: -1 } });
+        } catch (logErr) {
+            console.warn('Could not fetch activity logs for dashboard stats:', logErr.message);
+        }
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                items: itemStats.summary,
+                categories: itemStats.categories,
+                claims: claimStats,
+                recent_activities: recentLogs
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+        res.status(500).json({ status: 'error', message: 'Server Error' });
+    }
+};

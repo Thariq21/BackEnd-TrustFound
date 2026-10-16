@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: db-server
--- Generation Time: Jun 21, 2026 at 07:32 AM
+-- Generation Time: Sep 26, 2026 at 02:31 PM
 -- Server version: 11.8.2-MariaDB-ubu2404
 -- PHP Version: 8.3.26
 
@@ -41,8 +41,8 @@ CREATE TABLE `admin` (
 --
 
 INSERT INTO `admin` (`nip`, `univ_id`, `full_name`, `password`, `email`, `role`) VALUES
-(2314, 1231, 'Budi Santoso', '$2a$10$nJHeZLrizT1fSnZcl0I8GOVOJMjzUdHp6cwI8xqGppJGUQO2Ijz5u', 'budi@bakrie.ac.id', 'satpam'),
-(1231001056, 1231, 'Rahul Nafta', '$2a$10$w5JFv105prJkIJc3wcphYu.NjEvMGc7N1J6siJu9QiNTd6YOd.fD6', 'awan@bakrie.ac.id', 'admin');
+(2314, 1231, 'Budi Santoso', '$2a$12$F6X2u4bgYvY/6wlyV11LMuj3R6hcHD0aFqevy0V/UOmh4tZpM7HcW', 'budi@bakrie.ac.id', 'satpam'),
+(1231001056, 1231, 'Rahul Nafta', '$2a$12$FaXTUpkK3HBbNu6YgWUgSulXQ7R01piMzNMRO2hrjfSgTzFGfzQsm', 'awan@bakrie.ac.id', 'admin');
 
 -- --------------------------------------------------------
 
@@ -79,7 +79,9 @@ CREATE TABLE `claim` (
   `item_id` int(11) NOT NULL,
   `create_at` datetime NOT NULL DEFAULT current_timestamp(),
   `challange_answer` text NOT NULL,
-  `status` enum('pending','verified','rejected') NOT NULL,
+  `scheduled_slot_id` int(11) DEFAULT NULL,
+  `scheduled_date` date DEFAULT NULL,
+  `status` enum('pending','verified','scheduled','rejected','claimed') DEFAULT 'pending',
   `qr_token` varchar(255) DEFAULT NULL,
   `qr_expires_at` datetime DEFAULT NULL,
   `processed_at` datetime DEFAULT NULL
@@ -91,10 +93,17 @@ CREATE TABLE `claim` (
 
 INSERT INTO `claim` (`claim_id`, `claimer_nim`, `validator_nip`, `item_id`, `create_at`, `challange_answer`, `status`, `qr_token`, `qr_expires_at`, `processed_at`) VALUES
 (8, 1232001033, 2314, 10, '2026-01-09 13:14:09', 'Lecet dibagian tutup.', 'verified', NULL, NULL, '2026-01-09 13:15:05'),
-(9, 1232001011, 2314, 11, '2026-01-09 13:54:50', '-', 'verified', NULL, NULL, '2026-01-09 14:03:10'),
+(9, 1232001011, 2314, 11, '2026-01-09 13:54:50', '-', 'verified', '3d903698ca45977d3f5a8484ad116d8eca8d711335c452e9dc9c3ecf1a9f9c05', '2026-07-07 15:35:10', '2026-01-09 14:03:10'),
 (10, 1232001035, 2314, 12, '2026-01-09 14:25:44', 'Tumbler berwana hitam dengan merk Stanley.', 'verified', NULL, NULL, '2026-01-09 14:28:00'),
 (13, 1232001022, 1231001056, 13, '2026-01-10 08:54:37', 'Terdapat KTP Bernama Thariq Rahman', 'verified', NULL, NULL, '2026-01-10 08:56:02'),
-(16, 1232001011, NULL, 16, '2026-06-11 16:53:25', 'Saya Lapar', 'pending', NULL, NULL, NULL);
+(16, 1232001011, 2314, 16, '2026-06-11 16:53:25', 'Saya Lapar', 'verified', 'a19844298cef05ad24829638a81d16e0c9291357d07dab06cafc74cb31dbce2a', '2026-07-08 05:36:54', '2026-07-05 12:10:30'),
+(17, 1232001011, 2314, 17, '2026-07-07 05:36:36', 'warna coklat', 'claimed', NULL, NULL, '2026-07-07 11:59:15'),
+(18, 1232001011, 2314, 18, '2026-07-07 11:02:38', 'Isi ID card ada KTP, E-Money, dan Kartu akses centennial tower.\nNIK 3201112105050004', 'claimed', NULL, NULL, '2026-07-07 11:52:19'),
+(19, 1232001033, 1231001056, 25, '2026-07-14 12:16:09', 'Laptop Asus Vivobook 14X M1403QA dan ada Stiker Toriq di dalam laptopnya', 'claimed', NULL, NULL, '2026-07-14 12:26:36'),
+(20, 1232001011, NULL, 22, '2026-07-14 12:54:31', 'Smart Watch Merk Itel', 'pending', NULL, NULL, NULL),
+(21, 1232001033, 2314, 23, '2026-07-23 18:13:09', 'Terdapat goresan di bagian left side tws', 'claimed', NULL, NULL, '2026-07-23 18:21:46'),
+(22, 1232001011, NULL, 29, '2026-09-13 18:15:13', '-', 'pending', NULL, NULL, NULL),
+(23, 1232001011, NULL, 26, '2026-09-14 02:04:49', '-', 'pending', NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -117,14 +126,15 @@ CREATE TABLE `general_user` (
 --
 
 INSERT INTO `general_user` (`nim`, `univ_id`, `full_name`, `email`, `phone_number`, `password`, `status`) VALUES
-(1232001011, 1231, 'Thariq Rahman', '1232001011@student.bakrie.ac.id', '0881024468406', '$2a$10$.9UN9srmhYdx90U.2tE5heh8vOcdTMr4ve3HFJRsVVbm4ekqgf6V2', 'active'),
-(1232001022, 1231, 'Muhammad Alfi Anfahsa', '1232001022@student.bakrie.ac.id', '08561022054', '$2a$10$zHcwcKGUDrXMHUvck95o5eVzLSoHDbPKZyOEcCOSmBVNBfBSEoFb.', 'active'),
-(1232001032, 1231, 'Egbert Felica Wibianto', '1232001032@student.bakrie.ac.id', '085799335009', '$2a$10$T/Vtp/STML0ol/JfvV0Luehb/p9BfOHbFX2kgImCFNsdkHKck5LE2', 'active'),
-(1232001033, 1231, 'Daffa Ibnu Abdillah', '1232001033@student.bakrie.ac.id', '089636315277', '$2a$10$VOFhliIgMP1KDAki.J3k6u3qwkKKnMfgc4jWlA6Qe6O/uXBnwXLju', 'active'),
-(1232001035, 1231, 'Ghefa Marva Raka Putra', '1232001035@student.bakrie.ac.id', '081382703685', '$2a$10$Q/IBO5EzFNm7enlc2zgHxuaZdE4Gy0sO3NKSXjYyRT3Kq8b5.sWVy', 'active'),
-(1232001041, 1231, 'Muhammad Faalih', '1232001041@student.bakrie.ac.id', '083167282880', '$2a$10$w3cn9/iWcSFXDsQLz4ecY.mWyddnLoJjiPHjHEWkiUASNcipmK/qq', 'active'),
-(1232001044, 1231, 'Aditya Novadianto Pratama', '1232001044@student.bakrie.ac.id', '081292193758', '$2a$10$ObbloBrnMFP3AI4LYeycrO/Cx6wr3DmPWiuiop3QwE35FykCH7pgG', 'active'),
-(1232001046, 1231, 'Dinda Nuraini', '1232001046@student.bakrie.ac.id', '085710201820', '$2a$10$lzV33qvrQpiiixPT6q0U/OB7tEOCv4sGnrSpfnt2RjmherXzU7b2.', 'active');
+(1232001011, 1231, 'Thariq Rahman', '1232001011@student.bakrie.ac.id', '0881024468406', '$2a$12$qx9ZE/4nsyZ5FaF3OBmetebMPAvPkU1QpnMAizEDHFyPdwCyG6y7e', 'active'),
+(1232001022, 1231, 'Muhammad Alfi Anfahsa', '1232001022@student.bakrie.ac.id', '08561022054', '$2a$12$qx9ZE/4nsyZ5FaF3OBmetebMPAvPkU1QpnMAizEDHFyPdwCyG6y7e', 'active'),
+(1232001032, 1231, 'Egbert Felica Wibianto', '1232001032@student.bakrie.ac.id', '085799335009', '$2a$12$562uZI1sINkgDI9PMlnRW.sC6lmJ79KnIrT2LF9n6.ZF7/eHdxNae', 'active'),
+(1232001033, 1231, 'Daffa Ibnu Abdillah', '1232001033@student.bakrie.ac.id', '089636315277', '$2a$12$AY1n3XYkeaHRJctSsE0rH.XWSFTwrVWRWIbz4OycY6koAFyPgBkUe', 'active'),
+(1232001035, 1231, 'Ghefa Marva Raka Putra', '1232001035@student.bakrie.ac.id', '081382703685', '$2a$12$7M.8tjfyFx4JrXJpqOrjVuHObJGN9tqO.CublUKq3CJlmhHn762hi', 'active'),
+(1232001041, 1231, 'Muhammad Faalih', '1232001041@student.bakrie.ac.id', '083167282880', '$2a$12$oWhKjyNnZi5A5DtG8IklKeIJ/e5HAsGiLrhR9QhAe6u168GOyTKzq', 'active'),
+(1232001044, 1231, 'Aditya Novadianto Pratama', '1232001044@student.bakrie.ac.id', '081292193758', '$2a$12$sxE.20B4bpo3zhEz9KUvJO5rGOGNzzVl3yEUIIjz4EQmOvqCaIaDq', 'active'),
+(1232001046, 1231, 'Dinda Nuraini', '1232001046@student.bakrie.ac.id', '085710201820', '$2a$12$z.lF7v6BwEd9BWfG3CigvO2tnMAftLTau86TZbIzSeGLpMQqxu3ZG', 'active'),
+(1232001059, 1231, 'Kayla El-Raudhia De Nato', '1232001059@student.bakrie.ac.id', '0821989321', '$2a$12$/ThwIb/nYaeLrsOE7T7VMucPMDQvXPhycA67Son4sM5IRTmqczlgm', 'active');
 
 -- --------------------------------------------------------
 
@@ -157,7 +167,80 @@ INSERT INTO `item` (`item_id`, `finder_nim`, `manage_nip`, `category_id`, `name`
 (13, 1232001011, 1231001056, 2, 'Dompet', 'Dompet Hitam dengan KTP inisial TR', 'Student Lounge Kampus Bakrie Tower Lantai 90', 1, '2026-01-03', 'public/uploads/blur-1768034553495-212307680.jpeg', 'claimed'),
 (14, NULL, 2314, 3, 'Tumbler', 'Tumbler Putih Merk Corcircle', 'Lab B Kampus Plaza Festival', 0, '2025-01-05', 'public/uploads/1768034738738-395316710.jpeg', 'donated'),
 (15, 1232001011, 2314, 3, 'Tumbler Merah', 'Tumbler Lock&amp;Lock Warna Merah', 'Student Lounge Lobby Belakang Kampus Plaza Festival', 0, '2026-01-13', 'public/uploads/1768292810049-452765826.jpg', 'donated'),
-(16, 1232001011, 2314, 3, 'Indomie', 'Indomie Goreng rasa sate', 'Kost Toriq', 0, '2026-06-11', 'public/uploads/1781196640680-658356379.jpg', 'secured');
+(16, 1232001011, 2314, 3, 'Indomie', 'Indomie Goreng rasa sate', 'Kost Toriq', 0, '2026-06-11', 'public/uploads/1781196640680-658356379.jpg', 'donated'),
+(17, 1232001011, 2314, 3, 'Kotak Bekel', 'Bekel Warna Krem Bentuk Tabung', 'Ruang 2 Kampus Plaza Festival', 0, '2026-07-01', 'public/uploads/1782883399365-479986345.jpeg', 'claimed'),
+(18, 1232001046, 2314, 2, 'ID Card', 'ID Card beserta Kartu Identitas Lainnya', 'Lab ICH&#x2F;Cisco Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-07', 'public/uploads/blur-1783421975736-503784796.jpg', 'claimed'),
+(19, NULL, 2314, 1, 'Komputer', 'Test', 'Lobi', 1, '2026-07-06', 'public/uploads/blur-1783426581083-868400644.png', 'secured'),
+(20, 1232001011, 2314, 1, 'Komputer', 'Detail barang ini ditemukan di lobi UBakrie', 'Lobi', 1, '2026-07-02', 'public/uploads/blur-1783426725353-583292545.png', 'secured'),
+(21, 1232001011, 2314, 1, 'Server', 'jahdjxhshshsusyssy', 'Ruang 09', 1, '2026-07-07', 'public/uploads/blur-1783426729436-755724623.jpg', 'secured'),
+(22, 1232001011, 2314, 1, 'Smart Watch', 'Smart Watch Warna Hitam &#x2F; Biru Dongker dengan Merk Itel', 'Ruang 2 Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-08', 'public/uploads/blur-1783874542985-408399125.jpeg', 'secured'),
+(23, 1232001022, 2314, 1, 'TWS', 'TWS Warna Hitam Merk SoundCore r50i', 'Student Lounge Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-09', 'public/uploads/blur-1783874704173-105762848.jpeg', 'claimed'),
+(24, 1232001032, 1231001056, 1, 'laptop', 'Laptop Dell beserta chargernya', 'Ruang 8 Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-06', 'public/uploads/blur-1783874775192-516355987.jpeg', 'secured'),
+(25, 1232001033, 2314, 1, 'Laptop', 'Laptop Asus Vivobook 14x M1403QA', 'Ruang 4 Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-07', 'public/uploads/blur-1783874834122-177695238.jpeg', 'claimed'),
+(26, 1232001046, 1231001056, 3, 'Sisir', 'Sisir Warna Hitam dan Hijau', 'Student Lounge Universitas Bakrie Kampus Bakrie Tower', 0, '2026-07-02', 'public/uploads/1783874909485-823066411.jpeg', 'secured'),
+(27, 1232001059, 1231001056, 3, 'Tumbler', 'Tumbler dengan motif stiker astronot', 'Student Lounge Universitas Bakrie Kampus Bakrie Tower', 0, '2026-07-03', 'public/uploads/1783875010282-992180945.jpeg', 'secured'),
+(28, 1232001035, 1231001056, 3, 'tumbler corkcicle', 'Tumbler Putih', 'Lobby Depan Universitas Bakrie Kampus Plaza Festival', 0, '2026-07-01', 'public/uploads/1783875294476-824505447.jpeg', 'secured'),
+(29, 1232001044, 2314, 3, 'Kotak Bekal', 'Kotak Bekal dengan Warna Crem dan terdapat tas untuk kotaknya', 'Student Lounge Universitas Bakrie Kampus Bakrie Tower Lantai 42', 0, '2026-07-04', 'public/uploads/1784030852451-695501778.jpg', 'secured'),
+(30, 1232001059, 2314, 1, 'HandPhone', 'IPhone 13, warna biru dengan wallpaper juga biru', 'Ruang 10 Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-09', 'public/uploads/blur-1784031084974-780533294.jpg', 'secured'),
+(31, 1232001033, 2314, 1, 'Handphone', 'Iphone 17 Pro Max', 'Lobby Depan', 1, '2026-07-23', 'public/uploads/blur-1784830290971-135545449.jpg', 'secured'),
+(32, NULL, 2314, 2, 'Larparch', 'naniiii', 'Rumah Ireng', 1, '2026-09-11', 'public/uploads/blur-1789222803734-557373192.png', 'secured');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `pickup_slot`
+--
+
+CREATE TABLE `pickup_slot` (
+  `slot_id` int(11) NOT NULL,
+  `day_of_week` enum('Monday','Tuesday','Wednesday','Thursday','Friday') NOT NULL,
+  `start_time` time NOT NULL,
+  `end_time` time NOT NULL,
+  `location` varchar(255) NOT NULL DEFAULT 'Lemari Kaca Lost & Found',
+  `max_quota` int(11) NOT NULL DEFAULT 5,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `pickup_slot`
+--
+
+INSERT INTO `pickup_slot` (`slot_id`, `day_of_week`, `start_time`, `end_time`, `location`, `max_quota`, `is_active`) VALUES
+(1, 'Monday', '09:00:00', '10:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(2, 'Monday', '10:00:00', '11:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(3, 'Monday', '11:00:00', '12:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(4, 'Monday', '12:00:00', '13:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(5, 'Monday', '13:00:00', '14:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(6, 'Monday', '14:00:00', '15:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(7, 'Monday', '15:00:00', '16:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(8, 'Tuesday', '09:00:00', '10:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(9, 'Tuesday', '10:00:00', '11:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(10, 'Tuesday', '11:00:00', '12:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(11, 'Tuesday', '12:00:00', '13:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(12, 'Tuesday', '13:00:00', '14:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(13, 'Tuesday', '14:00:00', '15:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(14, 'Tuesday', '15:00:00', '16:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(15, 'Wednesday', '09:00:00', '10:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(16, 'Wednesday', '10:00:00', '11:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(17, 'Wednesday', '11:00:00', '12:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(18, 'Wednesday', '12:00:00', '13:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(19, 'Wednesday', '13:00:00', '14:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(20, 'Wednesday', '14:00:00', '15:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(21, 'Wednesday', '15:00:00', '16:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(22, 'Thursday', '09:00:00', '10:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(23, 'Thursday', '10:00:00', '11:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(24, 'Thursday', '11:00:00', '12:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(25, 'Thursday', '12:00:00', '13:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(26, 'Thursday', '13:00:00', '14:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(27, 'Thursday', '14:00:00', '15:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(28, 'Thursday', '15:00:00', '16:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(29, 'Friday', '09:00:00', '10:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(30, 'Friday', '10:00:00', '11:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(31, 'Friday', '11:00:00', '12:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(32, 'Friday', '12:00:00', '13:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(33, 'Friday', '13:00:00', '14:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(34, 'Friday', '14:00:00', '15:00:00', 'Lemari Kaca Lost & Found', 5, 1),
+(35, 'Friday', '15:00:00', '16:00:00', 'Lemari Kaca Lost & Found', 5, 1);
 
 -- --------------------------------------------------------
 
@@ -234,6 +317,13 @@ ALTER TABLE `university`
   ADD UNIQUE KEY `univ_id` (`univ_id`);
 
 --
+-- Indexes for table `pickup_slot`
+--
+ALTER TABLE `pickup_slot`
+  ADD PRIMARY KEY (`slot_id`),
+  ADD UNIQUE KEY `slot_id` (`slot_id`);
+
+--
 -- AUTO_INCREMENT for dumped tables
 --
 
@@ -253,19 +343,25 @@ ALTER TABLE `category`
 -- AUTO_INCREMENT for table `claim`
 --
 ALTER TABLE `claim`
-  MODIFY `claim_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
+  MODIFY `claim_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
 
 --
 -- AUTO_INCREMENT for table `general_user`
 --
 ALTER TABLE `general_user`
-  MODIFY `nim` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1232001047;
+  MODIFY `nim` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1232001060;
 
 --
 -- AUTO_INCREMENT for table `item`
 --
 ALTER TABLE `item`
-  MODIFY `item_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
+  MODIFY `item_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
+
+--
+-- AUTO_INCREMENT for table `pickup_slot`
+--
+ALTER TABLE `pickup_slot`
+  MODIFY `slot_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
 
 --
 -- AUTO_INCREMENT for table `university`
@@ -289,7 +385,8 @@ ALTER TABLE `admin`
 ALTER TABLE `claim`
   ADD CONSTRAINT `claim_fk1` FOREIGN KEY (`claimer_nim`) REFERENCES `general_user` (`nim`),
   ADD CONSTRAINT `claim_fk2` FOREIGN KEY (`validator_nip`) REFERENCES `admin` (`nip`),
-  ADD CONSTRAINT `claim_fk3` FOREIGN KEY (`item_id`) REFERENCES `item` (`item_id`);
+  ADD CONSTRAINT `claim_fk3` FOREIGN KEY (`item_id`) REFERENCES `item` (`item_id`),
+  ADD CONSTRAINT `claim_fk_slot` FOREIGN KEY (`scheduled_slot_id`) REFERENCES `pickup_slot` (`slot_id`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `general_user`

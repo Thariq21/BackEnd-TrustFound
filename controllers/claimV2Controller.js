@@ -21,9 +21,9 @@ export const getQRToken = async (req, res) => {
             return res.status(403).json({ status: 'error', message: 'Not authorized to view this claim' });
         }
 
-        // Check if claim is verified
-        if (claim.status !== 'verified') {
-            return res.status(400).json({ status: 'error', message: 'QR token can only be generated for verified claims' });
+        // Check if claim is verified or scheduled
+        if (claim.status !== 'verified' && claim.status !== 'scheduled') {
+            return res.status(400).json({ status: 'error', message: 'QR token can only be generated for verified or scheduled claims' });
         }
 
         // Check if existing token is still valid

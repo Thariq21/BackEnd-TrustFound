@@ -1,8 +1,9 @@
 import Claim from '../models/mysql/claimModel.js';
 import Item from '../models/mysql/itemModel.js';
 import User from '../models/mysql/userModel.js';
+import Slot from '../models/mysql/slotModel.js';
 import { logActivity } from '../utils/logger.js';
-import { sendClaimPendingEmailAsync } from '../services/emailService.js';
+import { sendClaimPendingEmailAsync, sendClaimScheduledEmailAsync } from '../services/emailService.js';
 
 // @desc    Create a claim for an item
 // @route   POST /api/claims
@@ -107,3 +108,112 @@ export const getMyClaims = async (req, res) => {
         res.status(500).json({ status: 'error', message: 'Server Error' });
     }
 };
+
+// @desc    Schedule pickup slot for an approved/verified claim (FR-04)
+// @route   POST /api/claims/:id/schedule
+// @access  Private (User - Claimer)
+export const scheduleClaimPickup = async (req, res) => {
+    const claimId = req.params.id;
+    const { slot_id, scheduled_date } = req.body;
+
+    if (!slot_id || !scheduled_date) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'slot_id and scheduled_date are required'
+        });
+    }
+
+    try {
+        const claim = await Claim.findById(claimId);
+        if (!claim) {
+            return res.status(404).json({ status: 'error', message: 'Claim not found' });
+        }
+
+        // Verify that the user owns this claim
+        if (String(claim.claimer_nim) !== String(req.user.id)) {
+            return res.status(403).json({ status: 'error', message: 'Not authorized to schedule this claim' });
+        }
+
+        // Only allow scheduling if claim is verified or already scheduled (rescheduling)
+        if (claim.status !== 'verified' && claim.status !== 'scheduled') {
+            return res.status(400).json({
+                status: 'error',
+                message: `Claim cannot be scheduled in status '${claim.status}'. Claim must be approved ('verified') first.`
+            });
+        }
+
+        // Check slot validity
+        const slot = await Slot.findById(slot_id);
+        if (!slot || !slot.is_active) {
+            return res.status(404).json({ status: 'error', message: 'Selected pickup slot is not available or inactive' });
+        }
+
+        // Check if scheduled_date matches slot day of week
+        const dateObj = new Date(scheduled_date);
+        if (isNaN(dateObj.getTime())) {
+            return res.status(400).json({ status: 'error', message: 'Invalid scheduled_date format. Expected YYYY-MM-DD.' });
+        }
+
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const dayOfWeek = days[dateObj.getDay()];
+
+        if (dayOfWeek !== slot.day_of_week) {
+            return res.status(400).json({
+                status: 'error',
+                message: `Date ${scheduled_date} falls on a ${dayOfWeek}, but selected slot is for ${slot.day_of_week}.`
+            });
+        }
+
+        // Check quota availability on that date
+        const availability = await Slot.getAvailableSlotsForDate(scheduled_date);
+        const slotAvailability = availability.slots.find(s => s.slot_id === parseInt(slot_id));
+        if (slotAvailability && slotAvailability.available_quota <= 0 && claim.scheduled_slot_id !== parseInt(slot_id)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Selected slot is fully booked for this date. Please choose another time slot.'
+            });
+        }
+
+        // Schedule the claim
+        await Claim.scheduleSlot(claimId, slot_id, scheduled_date);
+
+        // Fetch updated claim with slot information
+        const updatedClaim = await Claim.findById(claimId);
+
+        // Log to MongoDB
+        logActivity(
+            { id: req.user.id, role: 'user', name: 'Mahasiswa' },
+            'SCHEDULE_PICKUP_SLOT',
+            {
+                entity: 'Claim',
+                entityId: claimId,
+                details: `Scheduled pickup for item "${claim.item_name}" on ${scheduled_date} at ${slot.start_time.slice(0, 5)}-${slot.end_time.slice(0, 5)}`
+            },
+            req
+        );
+
+        // Async Email Notification
+        try {
+            sendClaimScheduledEmailAsync(
+                claim.claimer_email,
+                claimId,
+                claim.item_name,
+                scheduled_date,
+                `${slot.start_time.slice(0, 5)} - ${slot.end_time.slice(0, 5)}`,
+                slot.location,
+                claim.item_image_path
+            );
+        } catch (mailErr) {
+            console.error('Failed to trigger schedule email', mailErr);
+        }
+
+        res.status(200).json({
+            status: 'success',
+            message: 'Pickup slot scheduled successfully. You can now generate your QR E-Ticket for pickup.',
+            data: updatedClaim
+        });
+    } catch (error) {
+        console.error('Error scheduling pickup slot:', error);
+        res.status(500).json({ status: 'error', message: 'Server Error' });
+    }
+};
