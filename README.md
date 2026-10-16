@@ -33,8 +33,8 @@ Ikuti langkah-langkah berikut untuk menjalankan server di mesin lokal Anda.
 ### 1. Clone Repository
 
 ```bash
-git clone <repository_url>
-cd trustfound-backend
+git clone https://github.com/Thariq21/BackEnd-TrustFound
+cd BackEnd-TrustFound
 ```
 
 ### 2. Install Dependencies
