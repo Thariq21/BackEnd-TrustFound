@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@scalar/express-api-reference": "^0.10.23",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",

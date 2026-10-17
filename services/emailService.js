@@ -139,9 +139,32 @@ export const sendHandoverReceiptEmailAsync = (userEmail, claimId, itemName) => {
     sendEmailAsync(mailOptions, 'ITEM_HANDOVER_RECEIPT');
 };
 
+/**
+ * Sends an email when a user successfully schedules a pickup slot for an approved claim.
+ * Implemented using Fire-and-Forget pattern (FR-04, FR-06).
+ */
+export const sendClaimScheduledEmailAsync = (userEmail, claimId, itemName, scheduledDate, slotTime, location, imagePath = null) => {
+    const textMessage = `Your pickup appointment for "${itemName}" has been scheduled.\n\nDate: ${scheduledDate}\nTime: ${slotTime}\nLocation: ${location}\n\nPlease generate your QR E-Ticket in the TrustFound application before arriving at the location. An Admin BEM will scan your QR code to verify the handover.`;
+    const filename = imagePath ? imagePath.split(/[\/\\]/).pop() : null;
+    const fullImageUrl = filename ? `${process.env.SERVER_BASE_URL || 'http://localhost:5000'}/uploads/${filename}` : null;
+
+    const mailOptions = {
+        from: `"TrustFound System" <${process.env.SMTP_USER}>`,
+        to: userEmail,
+        subject: `Pickup Scheduled: ${itemName}`,
+        text: textMessage,
+        html: baseEmailTemplate(`Pickup Scheduled: ${itemName}`, textMessage, fullImageUrl)
+    };
+
+    // Fire and forget, no await
+    sendEmailAsync(mailOptions, 'CLAIM_SCHEDULED');
+};
+
 export default {
     sendClaimPendingEmailAsync,
     sendClaimDecisionEmailAsync,
     broadcastNewItemAsync,
-    sendHandoverReceiptEmailAsync
+    sendHandoverReceiptEmailAsync,
+    sendClaimScheduledEmailAsync
 };
+
