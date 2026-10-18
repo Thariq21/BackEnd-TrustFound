@@ -28,7 +28,8 @@
   },
   "scripts": {
     "start": "node app.js",
-    "dev": "nodemon app.js"
+    "dev": "nodemon app.js",
+    "test:e2e:frontend": "node frontend_business_flow.e2e.js"
   },
   "keywords": [],
   "author": "",

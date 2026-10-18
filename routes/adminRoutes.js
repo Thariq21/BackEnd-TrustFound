@@ -6,9 +6,13 @@ import {
     batchSecureItems,
     getDashboardStats,
     getClaimsAdmin,
-    processClaim 
+    processClaim,
+    approveItemReport,
+    rejectItemReport,
+    restoreRejectedItemReport
 } from '../controllers/adminController.js';
 import { getLogs } from '../controllers/logController.js';
+import { createSlot, deactivateSlot, getAdminSlots, updateSlot } from '../controllers/slotController.js';
 import { protect, adminOnly } from '../middleware/authMiddleware.js';
 import upload from '../middleware/uploadMiddleware.js'; // Import upload handler
 import { validate, itemValidation } from '../middleware/validation.js'; // Import validator
@@ -21,6 +25,13 @@ router.use(adminOnly);
 
 // --- Dashboard Statistics (FR-08) ---
 router.get('/dashboard/stats', getDashboardStats);
+router.get('/dashboard', getDashboardStats);
+router.get('/audit', getLogs);
+
+router.get('/slots', getAdminSlots);
+router.post('/slots', createSlot);
+router.patch('/slots/:id', updateSlot);
+router.delete('/slots/:id', deactivateSlot);
 
 // --- Items Management ---
 
@@ -41,6 +52,9 @@ router.post('/items',
 
 // 3. Secure Item (Verifikasi barang dari user)
 router.put('/items/:id/secure', secureItem); 
+router.patch('/items/:id/approve', approveItemReport);
+router.patch('/items/:id/reject', rejectItemReport);
+router.patch('/items/:id/restore', restoreRejectedItemReport);
 
 
 // --- Claims Management ---

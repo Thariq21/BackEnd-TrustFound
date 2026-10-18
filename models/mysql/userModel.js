@@ -13,6 +13,14 @@ const User = {
         return rows[0];
     },
 
+    findProfileByNim: async (nim) => {
+        const [rows] = await db.execute(
+            'SELECT nim, full_name, email, phone_number, status FROM general_user WHERE nim = ?',
+            [nim]
+        );
+        return rows[0];
+    },
+
     // Menambah user baru (Register)
     create: async (userData) => {
         const { nim, univ_id, full_name, email, phone_number, password, status } = userData;

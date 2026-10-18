@@ -9,7 +9,7 @@ Repositori ini dirancang menggunakan arsitektur **Hybrid Database** (MySQL & Mon
 ## ✨ Fitur Baru di v2.0 (Highlights)
 
 * **Blind Listing & Smart Verification [MVP]:** Melindungi privasi barang sensitif (seperti KTP, Dompet) dengan fitur *auto-blur* gambar otomatis dan mengamankan proses klaim barang temuan.
-* **QR Code E-Ticket (FR-01):** Menggantikan verifikasi nama manual. Sistem menghasilkan token kriptografi (via native Node.js `crypto`) dengan Time-to-Live (TTL) 24 jam untuk penyerahan barang (handover) fisik yang sangat aman di pos satpam.
+* **QR Code E-Ticket (FR-01):** Menggantikan verifikasi nama manual. Sistem menghasilkan token kriptografi (via native Node.js `crypto`) dengan Time-to-Live (TTL) 30 menit untuk penyerahan barang (handover) fisik yang sangat aman di pos satpam.
 * **Asynchronous Email & Cron Job (FR-02):** Menggunakan pola *Fire-and-Forget* melalui Nodemailer untuk mengirim email transaksional dan *broadcast* tanpa memblokir *thread* utama API. Juga dilengkapi Cron Job harian otomatis untuk mengarsipkan barang yang sudah lama.
 
 ---
@@ -82,25 +82,35 @@ npm start
 
 Server akan berjalan di: `http://localhost:5000`
 
+### Migrasi skema untuk frontend
+
+Database lama harus menjalankan migrasi `001_pickup_slots_and_schedule.sql`, `002_frontend_business_flow.sql`, lalu `003_frontend_report_moderation.sql` setelah skema dasar tersedia. Migrasi menambahkan dukungan slot bertanggal, laporan hilang/temuan, bukti klaim privat, serta status moderasi laporan yang terpisah dari status fisik barang. Laporan mahasiswa dimulai sebagai `report_review_status=pending`, disetujui menjadi `accepted`, atau ditolak menjadi `rejected`; persetujuan tidak mengamankan barang. Hanya laporan accepted yang muncul di katalog publik, dan barang temuan tetap harus diamankan (`status=secured`) sebelum dapat diklaim. Database baru yang dibuat dari `TrustFound.sql` tetap perlu menjalankan migrasi tersebut untuk tabel dan kolom jadwal.
+
 ---
 
 ## 🧪 Cara Testing API (E2E & Postman)
 
-Repositori ini telah dilengkapi dengan *script* otomasi **End-to-End (E2E) Integration Test** untuk menguji keseluruhan alur aplikasi dari pelaporan barang hingga cetak E-Ticket QR Code.
+Suite `frontend_business_flow.e2e.js` exercises login, lost/found reporting, public visibility before/after moderation, approval without changing physical status, rejection/restoration, item securing, optional-photo intake, batch securing, claims, admin review, slot availability and booking, ticket issuance/validation, profile, dashboard, and audit filters.
 
-### Menjalankan Automated E2E Test
-Script ini akan melakukan simulasi Login Mahasiswa, Report Barang, Review Admin, Login Mahasiswa Lain, Pengajuan Klaim, Verifikasi Admin, dan pembuatan QR Token.
+It only runs against a local, disposable database whose MySQL and MongoDB database names end in `_e2e`. The backend server and test runner must use the same local test database configuration, and migrations `001` through `003` must already be applied. It refuses to run unless `E2E_ALLOW_MUTATIONS=true` is explicitly set. On completion or failure, it removes its unique test users, reports, claims, pickup slot, uploaded images, and audit records.
 
-1. Pastikan server lokal Anda sedang berjalan (lihat langkah sebelumnya).
-2. Jika Anda belum menginstal paket testing, instal terlebih dahulu via terminal:
-   ```bash
-   npm install --save-dev axios form-data
-   ```
-3. Jalankan *script* testing:
-   ```bash
-   node e2e_test.js
-   ```
-   *Anda akan melihat log berurutan dari Step 1 hingga Step 8 di konsol Anda.*
+Start the local backend from a PowerShell session with email delivery disabled:
+
+```powershell
+$env:DISABLE_EMAILS = 'true'
+npm start
+```
+
+In a second PowerShell session, set the explicit test opt-in and run the suite:
+
+```powershell
+$env:DISABLE_EMAILS = 'true'
+$env:E2E_ALLOW_MUTATIONS = 'true'
+$env:E2E_BASE_URL = 'http://localhost:5000'
+npm run test:e2e:frontend
+```
+
+Do not point the backend or test runner at a development, shared, or production database. The suite does not create or migrate databases.
 
 ### Menggunakan Postman / Insomnia
 Jika Anda ingin melakukan testing manual:
@@ -142,18 +152,47 @@ trustfound-backend/
 | `POST` | `/api/items` | Lapor barang temuan (Upload Foto) | User |
 | `GET` | `/api/items` | Lihat daftar barang (Support Filter) | Public |
 | `GET` | `/api/items/:id` | Lihat detail satu barang | Public |
+| `POST` | `/api/items/reports` | Kirim laporan hilang/temuan dengan field foto `photo` atau `image` | User |
 
 ### 3. Claims (Klaim Barang)
 | Method | Endpoint | Deskripsi | Akses |
 | --- | --- | --- | --- |
 | `POST` | `/api/claims` | Ajukan klaim barang | User |
 | `GET` | `/api/claims/my` | Lihat riwayat klaim saya | User |
+| `POST` | `/api/items/:itemId/claims` | Ajukan klaim barang temuan yang sudah diamankan | User |
+| `GET` | `/api/claims` | Lihat klaim sendiri; admin mendapat daftar klaim untuk review | User/Admin |
+| `PATCH` | `/api/claims/:id` | Setujui (`APPROVED`/`verified`) atau tolak (`rejected`) klaim | Admin |
+| `GET` | `/api/claims/:id/evidence` | Ambil bukti klaim melalui endpoint terlindungi | Admin |
+
+### Moderasi laporan barang
+| Method | Endpoint | Kegunaan | Akses |
+| --- | --- | --- | --- |
+| `PATCH` | `/api/admin/items/:id/reject` | Tolak laporan pending dengan alasan wajib dan catatan opsional | Admin |
+| `PATCH` | `/api/admin/items/:id/approve` | Terima laporan pending tanpa mengubah status fisik barang | Admin |
+| `PATCH` | `/api/admin/items/:id/restore` | Pulihkan laporan ditolak ke status pending | Admin |
 
 ### 4. V2 Claims & Handover (QR Code) - **NEW**
 | Method | Endpoint | Deskripsi | Akses |
 | --- | --- | --- | --- |
-| `GET` | `/api/v2/claims/:claim_id/qr-token` | Generate QR Code Token dengan TTL 24 jam | User |
+| `GET` | `/api/v2/claims/:claim_id/qr-token` | Buat/ambil QR Code Token dengan TTL maksimal 30 menit setelah jadwal dibuat | User |
 | `POST` | `/api/v2/claims/validate-qr` | Validasi Token QR untuk Serah Terima Barang (Handover) | Satpam/Admin |
+
+### Frontend business-flow endpoints
+
+| Method | Endpoint | Kegunaan | Akses |
+| --- | --- | --- | --- |
+| `GET` | `/api/home` | Ringkasan katalog dan barang terbaru | Public |
+| `GET` | `/api/profile` | Profil, laporan, dan riwayat klaim pengguna | User |
+| `GET` | `/api/slots?date=YYYY-MM-DD` | Slot dan kuota yang tersedia pada tanggal tertentu | Public |
+| `POST` | `/api/schedules` | Jadwalkan klaim yang sudah disetujui (`claimId`, `slotId`, `date`) | User |
+| `GET` | `/api/tickets/:claimId` | Ambil/generate tiket untuk klaim terjadwal | User pemilik |
+| `POST` | `/api/tickets/validate` | Validasi QR dan catat serah-terima | Admin/Satpam |
+| `POST` | `/api/intake` | Catat barang temuan oleh satpam; foto opsional | Admin/Satpam |
+| `PUT` | `/api/admin/items/batch-secure` | Pindahkan intake temuan terpilih ke lemari kaca | Admin/Satpam |
+| `GET` | `/api/admin/dashboard` | Statistik dashboard admin | Admin |
+| `GET` | `/api/admin/audit` | Log aktivitas dengan filter tanggal/aktor/aksi | Admin |
+
+Login frontend `POST /api/auth/login` menerima NIM atau NIP dan kata sandi. Respons menyediakan `{ user: { id, nim, name, role }, token }`; peran UI adalah `MAHASISWA` atau `ADMIN_BEM`, sementara token tetap menyimpan peran backend untuk middleware otorisasi. Laporan hilang maupun temuan muncul di katalog; hanya barang temuan berstatus `secured` yang dapat diklaim. Bukti klaim disimpan di luar direktori file publik dan hanya dapat diambil melalui endpoint admin yang terlindungi.
 
 ### 5. V2 Notifications & Broadcast - **NEW**
 | Method | Endpoint | Deskripsi | Akses |

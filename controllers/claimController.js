@@ -4,56 +4,108 @@ import User from '../models/mysql/userModel.js';
 import Slot from '../models/mysql/slotModel.js';
 import { logActivity } from '../utils/logger.js';
 import { sendClaimPendingEmailAsync, sendClaimScheduledEmailAsync } from '../services/emailService.js';
+import fs from 'fs';
+
+const removeEvidence = (file) => {
+    if (!file?.path || !fs.existsSync(file.path)) return;
+    try {
+        fs.unlinkSync(file.path);
+    } catch (error) {
+        console.error(`Could not remove uploaded claim evidence ${file.path}:`, error);
+    }
+};
 
 // @desc    Create a claim for an item
 // @route   POST /api/claims
 // @access  Private (User)
 export const createClaim = async (req, res) => {
-    const { item_id, challange_answer } = req.body;
+    const body = req.body || {};
+    const itemId = req.params.itemId || body.item_id || body.itemId;
+    const evidence = req.file || req.files?.evidence?.[0] || null;
 
     try {
-        // 1. Cek apakah item ada
-        const item = await Item.findById(item_id);
+        let answers = body.answers;
+        if (typeof answers === 'string') {
+            try {
+                answers = JSON.parse(answers);
+            } catch {
+                removeEvidence(evidence);
+                return res.status(400).json({ status: 'error', message: 'answers must be a JSON array' });
+            }
+        }
+        if (!Array.isArray(answers) &&
+            (body['answers[0]'] !== undefined ||
+             body['answers[1]'] !== undefined ||
+             body['answers.0'] !== undefined ||
+             body['answers.1'] !== undefined)) {
+            answers = [
+                body['answers[0]'] || body['answers.0'],
+                body['answers[1]'] || body['answers.1']
+            ];
+        }
+        if (Array.isArray(answers) &&
+            (answers.length !== 2 || answers.some((answer) => typeof answer !== 'string' || !answer.trim()))) {
+            removeEvidence(evidence);
+            return res.status(400).json({ status: 'error', message: 'Both ownership verification answers are required' });
+        }
+        if (req.params.itemId && !Array.isArray(answers)) {
+            removeEvidence(evidence);
+            return res.status(400).json({ status: 'error', message: 'Both ownership verification answers are required' });
+        }
+        const legacyAnswer = String(
+            body.challange_answer || body.challengeAnswer || body.answer || ''
+        ).trim();
+        const answerText = Array.isArray(answers)
+            ? JSON.stringify({ answers: answers.map((answer) => answer.trim()) })
+            : legacyAnswer;
+
+        if (!itemId) {
+            removeEvidence(evidence);
+            return res.status(400).json({ status: 'error', message: 'Item ID is required' });
+        }
+
+        const item = await Item.findById(itemId);
         if (!item) {
+            removeEvidence(evidence);
             return res.status(404).json({ status: 'error', message: 'Item not found' });
         }
 
-        // 2. Validasi Challenge Answer berdasarkan Sensitivitas
-        let finalAnswer = challange_answer;
+        if (item.report_type !== 'found' || item.status !== 'secured') {
+            removeEvidence(evidence);
+            return res.status(409).json({
+                status: 'error',
+                message: 'Only found items available in the cabinet can be claimed'
+            });
+        }
 
-        // Jika barang SENSITIF, jawaban wajib ada
-        if (item.is_sensitive === 1) {
-            if (!challange_answer || challange_answer.trim() === "") {
-                return res.status(400).json({ 
+        if (Boolean(Number(item.is_sensitive)) && !answerText) {
+            removeEvidence(evidence);
+            return res.status(400).json({
                     status: 'error', 
                     message: 'This is a sensitive item. You must provide a challenge answer (e.g., detail ciri-ciri).' 
-                });
-            }
-        } else {
-            // Jika TIDAK SENSITIF, jawaban opsional. Jika kosong, kita isi default agar tidak error di database
-            if (!challange_answer || challange_answer.trim() === "") {
-                finalAnswer = "- (Non-sensitive item)";
-            }
+            });
         }
 
-        // 3. Cek apakah user sudah pernah klaim item ini
-        const existingClaims = await Claim.findByItemId(item_id);
-        // Pastikan req.user.id (NIM) tipenya sama dengan di DB (int/string)
-        // Kita konversi ke string untuk perbandingan yang aman
-        const userClaim = existingClaims.find(c => String(c.claimer_nim) === String(req.user.id));
-        
-        if (userClaim) {
-             return res.status(400).json({ status: 'error', message: 'You have already claimed this item' });
-        }
-
-        const newClaim = {
+        const result = await Claim.createActive({
             claimer_nim: req.user.id,
-            item_id,
-            challange_answer: finalAnswer,
-            status: 'pending'
-        };
-
-        const result = await Claim.create(newClaim);
+            item_id: itemId,
+            challange_answer: answerText || '-',
+            evidence_path: evidence?.path || null
+        });
+        if (result.error === 'item_unavailable') {
+            removeEvidence(evidence);
+            return res.status(409).json({
+                status: 'error',
+                message: 'This item is no longer available to claim'
+            });
+        }
+        if (result.error === 'duplicate') {
+            removeEvidence(evidence);
+            return res.status(409).json({
+                status: 'error',
+                message: 'You already have an active claim for this item'
+            });
+        }
 
          // 2. --- LOG ACTIVITY (USER CLAIM) ---
         logActivity(
@@ -61,8 +113,8 @@ export const createClaim = async (req, res) => {
             'CLAIM_ITEM',                                         // Action
             {                                                     // Target
                 entity: 'Claim', 
-                entityId: result.insertId, // ID Klaim yang baru
-                details: `Claiming Item ID: ${item_id} (${item.name})` 
+                entityId: result.claim_id,
+                details: `Claiming Item ID: ${itemId} (${item.name})`
             },
             req
         );
@@ -72,7 +124,7 @@ export const createClaim = async (req, res) => {
         try {
             const user = await User.findByNim(req.user.id);
             if (user && user.email) {
-                sendClaimPendingEmailAsync(user.email, result.insertId, item.name, item.image_path);
+            sendClaimPendingEmailAsync(user.email, result.claim_id, item.name, item.image_path);
             }
         } catch (e) {
             console.error('Failed to trigger email', e);
@@ -81,12 +133,28 @@ export const createClaim = async (req, res) => {
         res.status(201).json({
             status: 'success',
             message: 'Claim submitted successfully. Please visit the security post for verification.',
-            data: { claim_id: result.insertId }
+            data: { claim_id: result.claim_id, status: 'pending' }
         });
 
     } catch (error) {
+        removeEvidence(evidence);
         console.error(error);
         res.status(500).json({ status: 'error', message: 'Server Error' });
+    }
+};
+
+export const getClaimEvidence = async (req, res, next) => {
+    try {
+        const evidence = await Claim.findEvidenceById(req.params.id);
+        if (!evidence || !evidence.evidence_path || !fs.existsSync(evidence.evidence_path)) {
+            return res.status(404).json({ status: 'error', message: 'Claim evidence not found' });
+        }
+        return res.sendFile(evidence.evidence_path, (error) => {
+            if (error && !res.headersSent) next(error);
+        });
+    } catch (error) {
+        console.error('Could not retrieve claim evidence:', error);
+        return res.status(500).json({ status: 'error', message: 'Could not retrieve claim evidence' });
     }
 };
 
@@ -113,8 +181,9 @@ export const getMyClaims = async (req, res) => {
 // @route   POST /api/claims/:id/schedule
 // @access  Private (User - Claimer)
 export const scheduleClaimPickup = async (req, res) => {
-    const claimId = req.params.id;
-    const { slot_id, scheduled_date } = req.body;
+    const claimId = req.params.id || req.body.claim_id || req.body.claimId;
+    const slot_id = req.body.slot_id || req.body.slotId;
+    const scheduled_date = req.body.scheduled_date || req.body.scheduledDate || req.body.date;
 
     if (!slot_id || !scheduled_date) {
         return res.status(400).json({
@@ -150,13 +219,23 @@ export const scheduleClaimPickup = async (req, res) => {
 
         // Check if scheduled_date matches slot day of week
         const dateObj = new Date(scheduled_date);
-        if (isNaN(dateObj.getTime())) {
+        if (
+            !/^\d{4}-\d{2}-\d{2}$/.test(scheduled_date) ||
+            isNaN(dateObj.getTime()) ||
+            dateObj.toISOString().slice(0, 10) !== scheduled_date
+        ) {
             return res.status(400).json({ status: 'error', message: 'Invalid scheduled_date format. Expected YYYY-MM-DD.' });
         }
 
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const dayOfWeek = days[dateObj.getDay()];
+        const dayOfWeek = days[dateObj.getUTCDay()];
 
+        if (slot.slot_date && String(slot.slot_date).slice(0, 10) !== scheduled_date) {
+            return res.status(400).json({
+                status: 'error',
+                message: `Selected slot is only available on ${String(slot.slot_date).slice(0, 10)}.`
+            });
+        }
         if (dayOfWeek !== slot.day_of_week) {
             return res.status(400).json({
                 status: 'error',
@@ -166,7 +245,7 @@ export const scheduleClaimPickup = async (req, res) => {
 
         // Check quota availability on that date
         const availability = await Slot.getAvailableSlotsForDate(scheduled_date);
-        const slotAvailability = availability.slots.find(s => s.slot_id === parseInt(slot_id));
+        const slotAvailability = availability.slots.find(s => String(s.slot_id) === String(slot_id));
         if (slotAvailability && slotAvailability.available_quota <= 0 && claim.scheduled_slot_id !== parseInt(slot_id)) {
             return res.status(400).json({
                 status: 'error',
@@ -175,7 +254,19 @@ export const scheduleClaimPickup = async (req, res) => {
         }
 
         // Schedule the claim
-        await Claim.scheduleSlot(claimId, slot_id, scheduled_date);
+        const scheduled = await Claim.scheduleSlot(claimId, slot_id, scheduled_date);
+        if (scheduled.error === 'slot_unavailable') {
+            return res.status(404).json({ status: 'error', message: 'Selected pickup slot is not available' });
+        }
+        if (scheduled.error === 'slot_date_mismatch') {
+            return res.status(400).json({ status: 'error', message: 'Selected pickup slot is not available on that date' });
+        }
+        if (scheduled.error === 'slot_full') {
+            return res.status(409).json({ status: 'error', message: 'Selected pickup slot is fully booked' });
+        }
+        if (scheduled.error === 'claim_unavailable') {
+            return res.status(409).json({ status: 'error', message: 'Claim is no longer eligible for scheduling' });
+        }
 
         // Fetch updated claim with slot information
         const updatedClaim = await Claim.findById(claimId);

@@ -33,6 +33,8 @@ const logEmailEvent = async (status, eventType, details) => {
 // Generic Fire-and-Forget wrapper
 // This function executes asynchronously and catches its own errors so the Express server doesn't crash
 const sendEmailAsync = async (mailOptions, eventType) => {
+    if (process.env.DISABLE_EMAILS === 'true') return;
+
     try {
         await transporter.sendMail(mailOptions);
         
@@ -167,4 +169,3 @@ export default {
     sendHandoverReceiptEmailAsync,
     sendClaimScheduledEmailAsync
 };
-

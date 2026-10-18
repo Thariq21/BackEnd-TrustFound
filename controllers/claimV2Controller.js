@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import Claim from '../models/mysql/claimModel.js';
 import { sendHandoverReceiptEmailAsync } from '../services/emailService.js';
-import dbMongo from '../config/db_mongo.js';
+import { logActivity } from '../utils/logger.js';
 
 // @desc    Get QR Token for a claim
 // @route   GET /api/v2/claims/:claim_id/qr-token
@@ -21,55 +21,48 @@ export const getQRToken = async (req, res) => {
             return res.status(403).json({ status: 'error', message: 'Not authorized to view this claim' });
         }
 
-        // Check if claim is verified or scheduled
-        if (claim.status !== 'verified' && claim.status !== 'scheduled') {
-            return res.status(400).json({ status: 'error', message: 'QR token can only be generated for verified or scheduled claims' });
+        if (claim.status !== 'scheduled') {
+            return res.status(409).json({ status: 'error', message: 'A QR ticket is available only after pickup is scheduled' });
         }
 
-        // Check if existing token is still valid
-        if (claim.qr_token && claim.qr_expires_at) {
-            const now = new Date();
-            if (new Date(claim.qr_expires_at) > now) {
-                return res.status(200).json({
-                    status: 'success',
-                    data: {
-                        qr_token: claim.qr_token,
-                        expires_at: claim.qr_expires_at,
-                        time_to_live_seconds: Math.floor((new Date(claim.qr_expires_at) - now) / 1000)
-                    }
-                });
-            }
-        }
-
-        // Generate token and expiration
-        const qr_token = crypto.randomBytes(32).toString('hex');
         const issued_at = new Date();
-        const expires_at = new Date(issued_at.getTime() + 24 * 60 * 60 * 1000); // +24 hours
+        const expires_at = new Date(issued_at.getTime() + 30 * 60 * 1000);
         const expires_at_formatted = expires_at.toISOString().slice(0, 19).replace('T', ' ');
-
-        // Update database
-        await Claim.generateQR(claim_id, qr_token, expires_at_formatted);
-
-        // Log to MongoDB
-        try {
-            await dbMongo.collection('audit_trails').insertOne({
-                action: 'QR_GENERATED',
-                actor_nim: req.user.id,
-                claim_id: claim_id,
-                item_id: claim.item_id,
-                timestamp: new Date()
+        const issuedTicket = await Claim.issueQR(
+            claim_id,
+            crypto.randomBytes(32).toString('hex'),
+            expires_at_formatted
+        );
+        if (issuedTicket.error === 'claim_unavailable') {
+            return res.status(409).json({
+                status: 'error',
+                message: 'A QR ticket is available only after pickup is scheduled'
             });
-        } catch (mongoErr) {
-            console.error('Failed to log QR_GENERATED to audit_trails', mongoErr);
         }
+
+        logActivity(
+            { id: req.user.id, role: req.user.role, name: 'Mahasiswa' },
+            issuedTicket.reused ? 'QR_VIEWED' : 'QR_GENERATED',
+            {
+                entity: 'Claim',
+                entityId: claim_id,
+                details: `${issuedTicket.reused ? 'Viewed' : 'Generated'} ticket for item ${claim.item_id}`
+            },
+            req
+        );
 
         res.status(200).json({
             status: 'success',
             data: {
-                qr_token,
-                issued_at,
-                expires_at,
-                time_to_live_seconds: 24 * 60 * 60
+                qr_token: issuedTicket.qr_token,
+                qrValue: issuedTicket.qr_token,
+                issued_at: new Date(
+                    new Date(issuedTicket.expires_at).getTime() -
+                    issuedTicket.time_to_live_seconds * 1000
+                ),
+                expires_at: issuedTicket.expires_at,
+                expiresAt: issuedTicket.expires_at,
+                time_to_live_seconds: issuedTicket.time_to_live_seconds
             }
         });
     } catch (error) {
@@ -83,7 +76,7 @@ export const getQRToken = async (req, res) => {
 // @access  Private (Satpam)
 export const validateQR = async (req, res) => {
     try {
-        const { qr_token } = req.body;
+        const qr_token = req.body.qr_token || req.body.qrValue;
 
         if (!qr_token) {
             return res.status(400).json({ status: 'error', message: 'QR token is required' });
@@ -106,21 +99,20 @@ export const validateQR = async (req, res) => {
             return res.status(400).json({ status: 'error', message: 'Item has already been claimed' });
         }
 
-        // Perform atomic transaction
-        await Claim.validateQRAndClaimItem(claim.claim_id, claim.item_id);
-
-        // Log to MongoDB
-        try {
-            await dbMongo.collection('audit_trails').insertOne({
-                action: 'ITEM_HANDOVER_SUCCESS',
-                actor_nip: req.user.id, // Satpam ID
-                claim_id: claim.claim_id,
-                item_id: claim.item_id,
-                timestamp: new Date()
+        const handedOver = await Claim.validateQRAndClaimItem(claim.claim_id, claim.item_id, qr_token);
+        if (!handedOver) {
+            return res.status(409).json({
+                status: 'error',
+                message: 'Ticket expired, already used, or the item is no longer available'
             });
-        } catch (mongoErr) {
-            console.error('Failed to log ITEM_HANDOVER_SUCCESS to audit_trails', mongoErr);
         }
+
+        logActivity(
+            { id: req.user.id, role: req.user.role, name: 'Admin/Satpam' },
+            'ITEM_HANDOVER_SUCCESS',
+            { entity: 'Claim', entityId: claim.claim_id, details: `Item ${claim.item_id} handed over` },
+            req
+        );
 
         // Trigger Async Email (Fire and forget)
         sendHandoverReceiptEmailAsync(claim.claimer_email, claim.claim_id, claim.item_name);

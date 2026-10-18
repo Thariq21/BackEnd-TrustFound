@@ -33,6 +33,8 @@ pids
 # Kita ingin folder 'public/uploads' ada, tapi isinya jangan di-upload
 public/uploads/*
 !public/uploads/.gitkeep
+private/evidence/*
 
 # Database
 *.sql
+!migrations/*.sql

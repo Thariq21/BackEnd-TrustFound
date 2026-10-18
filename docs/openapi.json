@@ -3,7 +3,7 @@
   "info": {
     "title": "UBLost&Found API Documentation",
     "version": "1.0.0",
-    "description": "# Universitas Bakrie Lost and Found System \n\nOfficial REST API documentation for the **UBLost&Found** system. UBLost&Found connects students and university security (Satpam/Admin) to facilitate reporting, securing, claiming, and returning lost and found items.\n\n### Key Concepts & Workflows\n- **Authentication & Roles:**\n  - **Student (`role: user`):** Can report found items, submit claims, view personal claim history, and generate temporary QR tokens for verified items.\n  - **Satpam / Admin (`role: satpam`, `admin`, `super_admin`):** Can directly log secured items, verify student reports, approve/reject claims, scan QR tokens during handover, review MongoDB audit logs, and generate PDF reports.\n- **Item Privacy & Auto-Blur:** Items categorized under sensitive types (e.g. *Elektronik*, *Dompet/Identitas*) are automatically blurred using Sharp during upload. Admins can toggle sensitivity during verification.\n- **QR Handover Protocol:** Verified claims generate a temporary 26-hour QR token. The physical item handover is confirmed atomically when Satpam scans the QR token at the security desk.\n- **Auto-Donation:** Items remaining unclaimed for over 90 days are transitioned to `donated` status via background scheduled jobs.",
+    "description": "# Universitas Bakrie Lost and Found System \n\nOfficial REST API documentation for the **UBLost&Found** system. UBLost&Found connects students and university security (Satpam/Admin) to facilitate reporting, securing, claiming, and returning lost and found items.\n\n### Key Concepts & Workflows\n- **Authentication & Roles:**\n  - **Student (`role: user`):** Can report lost or found items, submit claims for secured found items, view personal history, and generate temporary QR tokens for scheduled claims.\n  - **Satpam / Admin (`role: satpam`, `admin`, `super_admin`):** Can directly log secured items, review student reports, approve/reject claims, scan QR tokens during handover, review MongoDB audit logs, and generate PDF reports.\n- **Report moderation and physical lifecycle are separate:** Student reports start with `report_review_status: pending` and are hidden from the public catalog until accepted. Admin approval changes only the review status; it does not secure the physical item. Found reports must separately transition through physical `status: pending` to `secured` before they can be claimed. Rejected reports have `report_review_status: rejected` and are excluded from public endpoints; `rejected` is not an item lifecycle status.\n- **Catalog & Item Privacy:** Accepted lost and found reports share the catalog; claims are limited to accepted, secured found items. Items categorized as sensitive (e.g. *Elektronik*, *Dompet/Identitas*) are automatically blurred using Sharp during upload. Admins can toggle sensitivity during securing.\n- **QR Handover Protocol:** Scheduled claims generate a temporary QR token valid for up to 30 minutes. The physical item handover is confirmed atomically when Satpam scans the QR token at the security desk.\n- **Auto-Donation:** Items remaining unclaimed for over 90 days are transitioned to `donated` status via background scheduled jobs.",
     "contact": {
       "name": "BEM & UBLost&Found Team",
       "email": "support@student.bakrie.ac.id"
@@ -251,7 +251,9 @@
         "required": [
           "status",
           "message",
-          "data"
+          "data",
+          "user",
+          "token"
         ],
         "properties": {
           "status": {
@@ -262,16 +264,63 @@
             "type": "string",
             "example": "Login successful"
           },
+          "user": {
+            "type": "object",
+            "required": [
+              "id",
+              "nim",
+              "name",
+              "role"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "example": "1232001011"
+              },
+              "nim": {
+                "type": "string",
+                "description": "NIM for students or NIP for admins",
+                "example": "1232001011"
+              },
+              "name": {
+                "type": "string",
+                "example": "Thariq Rahman"
+              },
+              "email": {
+                "type": "string",
+                "format": "email",
+                "example": "1232001011@student.bakrie.ac.id"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "MAHASISWA",
+                  "ADMIN_BEM"
+                ],
+                "example": "MAHASISWA"
+              }
+            }
+          },
+          "token": {
+            "type": "string",
+            "description": "Signed JWT; backend role claims remain unchanged",
+            "example": "******"
+          },
           "data": {
             "type": "object",
             "required": [
-              "nim",
-              "name",
-              "email",
-              "role",
+              "user",
               "token"
             ],
             "properties": {
+              "user": {
+                "type": "object",
+                "description": "Same frontend user object as the top-level user property"
+              },
+              "nip": {
+                "type": "string",
+                "description": "Present for admin login"
+              },
               "nim": {
                 "type": "string",
                 "example": "1232001011"
@@ -288,7 +337,10 @@
               "role": {
                 "type": "string",
                 "enum": [
-                  "user"
+                  "user",
+                  "satpam",
+                  "admin",
+                  "super_admin"
                 ],
                 "example": "user"
               },
@@ -441,6 +493,25 @@
             "description": "NIM of the student who found the item, or null if logged directly by admin",
             "example": 1232001033
           },
+          "report_type": {
+            "type": "string",
+            "enum": [
+              "found",
+              "lost"
+            ],
+            "description": "Whether this is a student lost-item report or a found-item report",
+            "example": "found"
+          },
+          "report_review_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected"
+            ],
+            "description": "Moderation status, independent from the physical item lifecycle status",
+            "example": "accepted"
+          },
           "manage_nip": {
             "type": [
               "integer",
@@ -479,6 +550,15 @@
             "format": "date",
             "example": "2026-01-01"
           },
+          "report_time": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "time",
+            "description": "Optional local time associated with the report",
+            "example": "14:30"
+          },
           "image_path": {
             "type": "string",
             "description": "Relative server path to image in static uploads folder",
@@ -492,8 +572,35 @@
               "claimed",
               "donated"
             ],
-            "description": "Current lifecycle status: pending (reported by student), secured (verified by security), claimed (returned to owner), donated (>90 days expired)",
+            "description": "Physical lifecycle status: pending (not yet secured), secured (held by security), claimed (returned to owner), donated (>90 days expired). Moderation is represented separately by report_review_status.",
             "example": "secured"
+          },
+          "reviewed_by": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Admin NIP that accepted or rejected the report"
+          },
+          "reviewed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "rejection_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 255
+          },
+          "rejection_note": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "category_name": {
             "type": "string",
@@ -1366,8 +1473,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Student login",
-        "description": "Authenticates a student using their NIM and password. Returns a signed JWT token valid for 1 hour with `role: user`.",
+        "summary": "Student or admin login",
+        "description": "Authenticates a student by NIM or an admin by NIP and password. Returns a frontend-compatible user object and signed JWT valid for 1 hour. The JWT retains backend roles (`user`, `satpam`, `admin`, or `super_admin`); the user object exposes `MAHASISWA` or `ADMIN_BEM`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1476,24 +1583,28 @@
         "tags": [
           "Items"
         ],
-        "summary": "List lost & found items (Public / Filterable)",
-        "description": "Retrieves published items. By default, returns items with status `pending`. Supports filtering by category ID, date range, or status (e.g. `secured`, `claimed`, `donated`, or `all`).",
+        "summary": "List catalog items with frontend-compatible filters",
+        "description": "Lists active catalog reports by default: pending found and lost reports, plus secured found items. Rejected reports are excluded. Status aliases `WAITING_AT_SECURITY` and `AVAILABLE` map to pending and secured; `SCHEDULED` filters items with a scheduled claim. Rejected reports are never returned from the public list, including status=all.",
         "parameters": [
           {
             "name": "status",
             "in": "query",
             "required": false,
-            "description": "Filter item lifecycle status. Use `all` to retrieve all statuses.",
+            "description": "Catalog lifecycle filter. Defaults to catalog; scheduled matches items with a scheduled claim.",
             "schema": {
               "type": "string",
               "enum": [
+                "catalog",
                 "pending",
                 "secured",
                 "claimed",
                 "donated",
-                "all"
+                "scheduled",
+                "all",
+                "WAITING_AT_SECURITY",
+                "AVAILABLE"
               ],
-              "default": "pending"
+              "default": "catalog"
             }
           },
           {
@@ -1527,6 +1638,42 @@
               "format": "date"
             },
             "example": "2026-09-30"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Search item name, description, or location (alias: q)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "report_type",
+            "in": "query",
+            "description": "Filter lost/found reports (alias: type)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "lost",
+                "found"
+              ],
+              "default": "all"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Filter by sensitivity category (alias labels: Umum/Sensitif)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "general",
+                "sensitive",
+                "umum",
+                "sensitif"
+              ]
+            }
           }
         ],
         "responses": {
@@ -1709,7 +1856,7 @@
             }
           },
           "404": {
-            "description": "Item not found",
+            "description": "Item not found or report is rejected and hidden from public access",
             "content": {
               "application/json": {
                 "schema": {
@@ -1914,7 +2061,7 @@
           "Admin - Items"
         ],
         "summary": "List all items for Admin Dashboard",
-        "description": "Retrieves items for the security post/admin dashboard with joined reporter and managing officer names. Filterable by status and date range.",
+        "description": "Retrieves reports for the security post/admin dashboard with joined reporter and managing officer names. Filterable by physical lifecycle status, report review status, report type, search, and date range.",
         "security": [
           {
             "BearerAuth": []
@@ -1934,6 +2081,22 @@
                 "secured",
                 "claimed",
                 "donated"
+              ],
+              "default": "all"
+            }
+          },
+          {
+            "name": "review_status",
+            "in": "query",
+            "required": false,
+            "description": "Filter by independent report moderation status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "pending",
+                "accepted",
+                "rejected"
               ],
               "default": "all"
             }
@@ -2125,7 +2288,7 @@
           "Admin - Items"
         ],
         "summary": "Verify and secure student-reported item",
-        "description": "Transitions a student-reported item from `pending` to `secured` status, assigning the verifying officer's NIP. Optionally toggles image sensitivity (`is_sensitive: true/false`). If sensitivity changes, the image is dynamically blurred or restored using Sharp, and an asynchronous broadcast email is dispatched to all registered users.",
+        "description": "Transitions a student-reported item from `pending` to `secured` status, assigning the verifying officer's NIP. Optionally toggles image sensitivity (`is_sensitive: true/false`). If sensitivity changes, the image is dynamically blurred or restored using Sharp, and an asynchronous broadcast email is dispatched to all registered users. Only pending found reports can be secured.",
         "security": [
           {
             "BearerAuth": []
@@ -2912,7 +3075,7 @@
           "Pickup Slots"
         ],
         "summary": "Get operational pickup slots or check availability by date",
-        "description": "Retrieve all pre-generated 1-hour recurring weekly slots (Monday to Friday, 09:00 - 16:00), or check availability and remaining quota for a target date.",
+        "description": "Retrieve recurring weekly slots and date-specific slots, or check availability and remaining quota for a target date.",
         "parameters": [
           {
             "name": "date",
@@ -3081,7 +3244,7 @@
           "Admin - Items"
         ],
         "summary": "Batch secure items (Move Pos Satpam to Glass Cabinet)",
-        "description": "Admin BEM moves a batch of items from Pos Satpam (pending / Menunggu di Pos Satpam) to the Glass Cabinet (secured / Tersedia di Lemari) (FR-07).",
+        "description": "Admin BEM moves accepted found reports from Pos Satpam (pending / Menunggu di Pos Satpam) to the Glass Cabinet (secured / Tersedia di Lemari) (FR-07). Reports awaiting moderation and lost reports are skipped; an empty or omitted ID list processes all eligible reports.",
         "security": [
           {
             "BearerAuth": []
@@ -3127,7 +3290,7 @@
           "Admin - Logs & Reports"
         ],
         "summary": "Get dashboard statistics for Admin BEM",
-        "description": "Calculates real-time summary statistics for Admin BEM: item counts by status, claim counts, claim success ratio, average handover turnaround duration, category distribution, and recent activity logs (FR-08).",
+        "description": "Calculates real-time summary statistics for Admin BEM, including pending/rejected report moderation counts separately from physical item lifecycle counts, claim metrics, category distribution, and recent activity logs (FR-08).",
         "security": [
           {
             "BearerAuth": []
@@ -3154,6 +3317,15 @@
                             "total_items": {
                               "type": "integer",
                               "example": 25
+                            },
+                            "pending_review_reports": {
+                              "type": "integer",
+                              "description": "Reports awaiting moderation; separate from physical pending items",
+                              "example": 3
+                            },
+                            "rejected_reports": {
+                              "type": "integer",
+                              "example": 1
                             },
                             "waiting_security_post": {
                               "type": "integer",
@@ -3225,6 +3397,874 @@
           },
           "500": {
             "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/home": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Get the public frontend home summary",
+        "responses": {
+          "200": {
+            "description": "Catalog summary and recent public items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiSuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profile": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Get the current student's profile, claims, and reports",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile and associated records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiSuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        }
+      }
+    },
+    "/api/items/reports": {
+      "post": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Submit a found or lost item report",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "type",
+                  "name",
+                  "category",
+                  "location",
+                  "date",
+                  "time",
+                  "photo"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "found",
+                      "lost"
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "sensitive"
+                    ]
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "date": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "time": {
+                    "type": "string",
+                    "format": "time"
+                  },
+                  "photo": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Report stored and added to the catalog"
+          },
+          "400": {
+            "description": "Invalid report or image"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        }
+      }
+    },
+    "/api/items/{itemId}/claims": {
+      "post": {
+        "tags": [
+          "Claims"
+        ],
+        "summary": "Submit an ownership claim for an available found item",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "answers"
+                ],
+                "properties": {
+                  "answers": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Claim created with status pending"
+          },
+          "400": {
+            "description": "Ownership answers are invalid"
+          },
+          "409": {
+            "description": "Item is unavailable or already claimed by this user"
+          }
+        }
+      }
+    },
+    "/api/claims/{id}": {
+      "patch": {
+        "tags": [
+          "Claims"
+        ],
+        "summary": "Approve or reject a pending claim",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "APPROVED",
+                      "verified",
+                      "rejected"
+                    ]
+                  },
+                  "review_note": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Claim decision saved"
+          },
+          "403": {
+            "description": "Admin role required"
+          },
+          "409": {
+            "description": "Claim is no longer pending or item already approved"
+          }
+        }
+      }
+    },
+    "/api/claims/{id}/evidence": {
+      "get": {
+        "tags": [
+          "Claims"
+        ],
+        "summary": "Retrieve private claim evidence",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JPG or PNG evidence file"
+          },
+          "403": {
+            "description": "Admin role required"
+          },
+          "404": {
+            "description": "Evidence not found"
+          }
+        }
+      }
+    },
+    "/api/schedules": {
+      "post": {
+        "tags": [
+          "Pickup Slots"
+        ],
+        "summary": "Schedule an approved claim for pickup",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "claimId",
+                  "slotId",
+                  "date"
+                ],
+                "properties": {
+                  "claimId": {
+                    "type": "integer"
+                  },
+                  "slotId": {
+                    "type": "integer"
+                  },
+                  "date": {
+                    "type": "string",
+                    "format": "date"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Claim scheduled"
+          },
+          "409": {
+            "description": "Claim ineligible or slot quota exhausted"
+          }
+        }
+      }
+    },
+    "/api/tickets/{id}": {
+      "get": {
+        "tags": [
+          "Claims V2 (QR Handover)"
+        ],
+        "summary": "Get a 30-minute ticket for a scheduled claim",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ticket token and expiry"
+          },
+          "403": {
+            "description": "Claim belongs to another user"
+          },
+          "409": {
+            "description": "Claim must be scheduled first"
+          }
+        }
+      }
+    },
+    "/api/tickets/validate": {
+      "post": {
+        "tags": [
+          "Claims V2 (QR Handover)"
+        ],
+        "summary": "Validate a ticket and complete the physical handover",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "qrValue"
+                ],
+                "properties": {
+                  "qrValue": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Handover completed"
+          },
+          "403": {
+            "description": "Admin/Satpam role required"
+          },
+          "409": {
+            "description": "Ticket expired, already used, or item unavailable"
+          }
+        }
+      }
+    },
+    "/api/intake": {
+      "post": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Record a found-item intake; a photo is optional",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "location",
+                  "time",
+                  "category"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "time": {
+                    "type": "string",
+                    "format": "time"
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "Umum",
+                      "Sensitif"
+                    ]
+                  },
+                  "photo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Intake saved as a pending found item"
+          },
+          "403": {
+            "description": "Admin/Satpam role required"
+          }
+        }
+      }
+    },
+    "/api/admin/dashboard": {
+      "get": {
+        "tags": [
+          "Admin - Logs & Reports"
+        ],
+        "summary": "Get admin dashboard statistics",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Item, claim, category, and recent activity summary"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        }
+      }
+    },
+    "/api/admin/audit": {
+      "get": {
+        "tags": [
+          "Admin - Logs & Reports"
+        ],
+        "summary": "Search the activity audit trail",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorId",
+            "in": "query",
+            "description": "Filter by actor ID (frontend actor filter; alias: actor)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "eventType",
+            "in": "query",
+            "description": "Filter by event/action (alias: action)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "description": "Start date inclusive (alias: startDate)",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "description": "End date inclusive (alias: endDate)",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum events to return (1-500; default 100)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filtered audit events"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        }
+      }
+    },
+    "/api/admin/slots": {
+      "get": {
+        "tags": [
+          "Pickup Slots"
+        ],
+        "summary": "List active and inactive admin pickup slots",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pickup slots"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pickup Slots"
+        ],
+        "summary": "Create a recurring or date-specific pickup slot",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "start_time",
+                  "end_time"
+                ],
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "day_of_week": {
+                    "type": "string",
+                    "enum": [
+                      "Monday",
+                      "Tuesday",
+                      "Wednesday",
+                      "Thursday",
+                      "Friday"
+                    ]
+                  },
+                  "start_time": {
+                    "type": "string",
+                    "format": "time"
+                  },
+                  "end_time": {
+                    "type": "string",
+                    "format": "time"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "max_quota": {
+                    "type": "integer",
+                    "default": 5
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Slot created"
+          },
+          "400": {
+            "description": "Invalid slot details"
+          }
+        }
+      }
+    },
+    "/api/admin/slots/{id}": {
+      "patch": {
+        "tags": [
+          "Pickup Slots"
+        ],
+        "summary": "Update a pickup slot",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Slot updated"
+          },
+          "404": {
+            "description": "Slot not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Pickup Slots"
+        ],
+        "summary": "Deactivate a pickup slot without deleting its booking history",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Slot deactivated"
+          },
+          "404": {
+            "description": "Slot not found"
+          }
+        }
+      }
+    },
+    "/api/admin/items/{id}/approve": {
+      "patch": {
+        "tags": [
+          "Admin - Items"
+        ],
+        "summary": "Accept a pending report",
+        "description": "Changes only `report_review_status` from `pending` to `accepted`; the physical item `status` is unchanged. Only accepted found reports can later be secured and claimed.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Report accepted, with its physical lifecycle status unchanged"
+          },
+          "403": {
+            "description": "Admin role required"
+          },
+          "404": {
+            "description": "Report not found"
+          },
+          "409": {
+            "description": "Only reports pending review can be accepted"
+          }
+        }
+      }
+    },
+    "/api/admin/items/{id}/reject": {
+      "patch": {
+        "tags": [
+          "Admin - Items"
+        ],
+        "summary": "Reject a pending item report",
+        "description": "Sets `report_review_status` to `rejected` without changing the physical item lifecycle status. Rejected reports are removed from public endpoints. A report can only be rejected while pending review.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Report rejected; rejection reason, note, reviewer, and time are returned"
+          },
+          "400": {
+            "description": "Missing/invalid rejection reason or note"
+          },
+          "403": {
+            "description": "Admin role required"
+          },
+          "404": {
+            "description": "Report not found"
+          },
+          "409": {
+            "description": "Only pending reports can be rejected"
+          }
+        }
+      }
+    },
+    "/api/admin/items/{id}/restore": {
+      "patch": {
+        "tags": [
+          "Admin - Items"
+        ],
+        "summary": "Restore a rejected report to pending review",
+        "description": "Clears rejection metadata and sets `report_review_status` to `pending`; the physical item lifecycle status remains unchanged.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Report restored to pending review and rejection metadata cleared; physical item status unchanged"
+          },
+          "403": {
+            "description": "Admin role required"
+          },
+          "404": {
+            "description": "Report not found"
+          },
+          "409": {
+            "description": "Only rejected reports can be restored"
           }
         }
       }

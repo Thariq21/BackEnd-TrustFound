@@ -3,6 +3,7 @@ node_modules/
 venv/
 .venv/
 vendor/
+private/evidence/
 
 # Mengabaikan file hasil build/kompilasi
 dist/

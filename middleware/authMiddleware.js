@@ -4,41 +4,26 @@ import dotenv from 'dotenv';
 dotenv.config({ path: './config/config.env' });
 
 const protect = async (req, res, next) => {
-    let token;
-
-    if (
-        req.headers.authorization &&
-        req.headers.authorization.startsWith('Bearer')
-    ) {
-        try {
-            // Get token from header
-            token = req.headers.authorization.split(' ')[1];
-
-            // Verify token
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-            // Add user info to request (without password)
-            // Note: decoded usually contains { id: ..., role: ..., iat: ..., exp: ... }
-            req.user = decoded; 
-
-            next();
-        } catch (error) {
-            console.error(error);
-            res.status(401).json({ status: 'error', message: 'Not authorized, token failed' });
-        }
+    const authorization = req.headers.authorization || '';
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    if (!match) {
+        return res.status(401).json({ status: 'error', message: 'Not authorized, no token' });
     }
 
-    if (!token) {
-        res.status(401).json({ status: 'error', message: 'Not authorized, no token' });
+    try {
+        req.user = jwt.verify(match[1], process.env.JWT_SECRET);
+        return next();
+    } catch (error) {
+        console.error('Bearer token verification failed:', error.message);
+        return res.status(401).json({ status: 'error', message: 'Not authorized, token failed' });
     }
 };
 
 const adminOnly = (req, res, next) => {
-    if (req.user && (req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.role === 'satpam')) {
-        next();
-    } else {
-        res.status(403).json({ status: 'error', message: 'Not authorized as an admin' });
+    if (req.user && ['admin', 'super_admin', 'satpam', 'ADMIN_BEM'].includes(req.user.role)) {
+        return next();
     }
+    return res.status(403).json({ status: 'error', message: 'Not authorized as an admin' });
 };
 
 export { protect, adminOnly };

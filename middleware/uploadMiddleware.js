@@ -1,11 +1,17 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 
-// Pastikan folder upload tersedia
-const uploadDir = 'public/uploads/';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadDir = path.join(__dirname, '../public/uploads');
+const evidenceDir = path.join(__dirname, '../private/evidence');
 if (!fs.existsSync(uploadDir)){
     fs.mkdirSync(uploadDir, { recursive: true });
+}
+if (!fs.existsSync(evidenceDir)) {
+    fs.mkdirSync(evidenceDir, { recursive: true });
 }
 
 // Konfigurasi penyimpanan file
@@ -21,25 +27,35 @@ const storage = multer.diskStorage({
     }
 });
 
-// Filter tipe file (Hanya Gambar)
 const fileFilter = (req, file, cb) => {
-    const allowedFileTypes = /jpeg|jpg|png|gif/;
-    const extname = allowedFileTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedFileTypes.test(file.mimetype);
-
-    if (extname && mimetype) {
-        return cb(null, true);
-    } else {
-        cb(new Error('Error: Only Images (jpeg, jpg, png, gif) are allowed!'));
-    }
+    const extname = /\.(jpe?g|png)$/i.test(path.extname(file.originalname));
+    const mimetype = ['image/jpeg', 'image/png'].includes(file.mimetype);
+    if (extname && mimetype) return cb(null, true);
+    return cb(new Error('Only JPG and PNG images are allowed'));
 };
 
-const upload = multer({ 
-    storage: storage,
-    limits: {
-        fileSize: 5 * 1024 * 1024 // Batas ukuran file 5MB
-    },
-    fileFilter: fileFilter
+const limits = {
+    fileSize: 5 * 1024 * 1024
+};
+
+const upload = multer({
+    storage,
+    limits,
+    fileFilter
+});
+
+const evidenceStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, evidenceDir),
+    filename: (req, file, cb) => {
+        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+        cb(null, uniqueSuffix + path.extname(file.originalname).toLowerCase());
+    }
+});
+
+export const evidenceUpload = multer({
+    storage: evidenceStorage,
+    limits,
+    fileFilter
 });
 
 export default upload;
