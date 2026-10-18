@@ -22,9 +22,16 @@ export const getAllItemsAdmin = async (req, res) => {
     
     try {
         const filters = {};
-        if (status) filters.status = status;
+        if (status && status !== 'all') filters.status = String(status).toLowerCase();
+        if (req.query.review_status && req.query.review_status !== 'all') {
+            filters.report_review_status = String(req.query.review_status).toLowerCase();
+        }
         if (startDate) filters.startDate = startDate;
         if (endDate) filters.endDate = endDate;
+        if (req.query.report_type && req.query.report_type !== 'all') {
+            filters.report_type = String(req.query.report_type).toLowerCase();
+        }
+        if (req.query.search || req.query.q) filters.search = req.query.search || req.query.q;
 
         // Panggil fungsi model khusus admin
         const items = await Item.findAllAdmin(filters);
@@ -51,8 +58,20 @@ export const secureItem = async (req, res) => {
         if (!item) {
             return res.status(404).json({ status: 'error', message: 'Item not found' });
         }
+        if (item.report_type !== 'found') {
+            return res.status(409).json({ status: 'error', message: 'Lost-item reports cannot be secured as found property' });
+        }
+        if (item.report_review_status !== 'accepted') {
+            return res.status(409).json({ status: 'error', message: 'Only accepted reports can be secured' });
+        }
+        if (item.status !== 'pending') {
+            return res.status(409).json({ status: 'error', message: 'Only pending found reports can be secured' });
+        }
 
-        await Item.updateStatus(itemId, 'secured', req.user.id);
+        const secureResult = await Item.securePendingFoundReport(itemId, req.user.id);
+        if (secureResult.affectedRows !== 1) {
+            return res.status(409).json({ status: 'error', message: 'Report status changed before it could be secured' });
+        }
         
         // Handle Perubahan Sensitivitas
         let sensitivityChanged = false;
@@ -61,51 +80,51 @@ export const secureItem = async (req, res) => {
             
             if (newSensitiveVal !== item.is_sensitive) {
                 sensitivityChanged = true;
-                const currentImagePath = item.image_path; 
-                const currentFilename = path.basename(currentImagePath); 
-                const uploadDirRelative = 'public/uploads/';
-                const uploadDirAbsolute = path.join(__dirname, '../public/uploads/');
-
-                // Identifikasi nama file asli (tanpa 'blur-')
-                let originalFilename = currentFilename.startsWith('blur-') 
-                    ? currentFilename.replace('blur-', '') 
-                    : currentFilename;
-                
-                const originalFilePathAbsolute = path.join(uploadDirAbsolute, originalFilename);
-
-                if (newSensitiveVal === 1) {
-                    // --- KASUS: Jernih -> Blur ---
-                    if (fs.existsSync(originalFilePathAbsolute)) {
-                        const blurredFilename = `blur-${originalFilename}`;
-                        const blurredPathAbsolute = path.join(uploadDirAbsolute, blurredFilename);
-                        const blurredPathRelative = path.join(uploadDirRelative, blurredFilename);
-
-                        await sharp(originalFilePathAbsolute)
-                            .resize(500)
-                            .blur(20)
-                            .toFile(blurredPathAbsolute);
-                        
-                        await Item.updateDetails(itemId, { 
-                            is_sensitive: 1, 
-                            image_path: blurredPathRelative 
-                        });
-                    } else {
-                        console.warn(`File asli tidak ditemukan: ${originalFilePathAbsolute}`);
-                        await Item.updateDetails(itemId, { is_sensitive: 1 });
-                    }
-
+                if (!item.image_path) {
+                    await Item.updateDetails(itemId, { is_sensitive: newSensitiveVal });
                 } else {
-                    // --- KASUS: Blur -> Jernih (Unblur) ---
-                    if (fs.existsSync(originalFilePathAbsolute)) {
-                        const originalPathRelative = path.join(uploadDirRelative, originalFilename);
-                        
-                        await Item.updateDetails(itemId, { 
-                            is_sensitive: 0, 
-                            image_path: originalPathRelative 
-                        });
+                    const currentImagePath = item.image_path;
+                    const currentFilename = path.basename(currentImagePath);
+                    const uploadDirRelative = 'public/uploads/';
+                    const uploadDirAbsolute = path.join(__dirname, '../public/uploads/');
+
+                    let originalFilename = currentFilename.startsWith('blur-')
+                        ? currentFilename.replace('blur-', '')
+                        : currentFilename;
+
+                    const originalFilePathAbsolute = path.join(uploadDirAbsolute, originalFilename);
+
+                    if (newSensitiveVal === 1) {
+                        if (fs.existsSync(originalFilePathAbsolute)) {
+                            const blurredFilename = `blur-${originalFilename}`;
+                            const blurredPathAbsolute = path.join(uploadDirAbsolute, blurredFilename);
+                            const blurredPathRelative = path.join(uploadDirRelative, blurredFilename);
+
+                            await sharp(originalFilePathAbsolute)
+                                .resize(500)
+                                .blur(20)
+                                .toFile(blurredPathAbsolute);
+
+                            await Item.updateDetails(itemId, {
+                                is_sensitive: 1,
+                                image_path: blurredPathRelative
+                            });
+                        } else {
+                            console.warn(`File asli tidak ditemukan: ${originalFilePathAbsolute}`);
+                            await Item.updateDetails(itemId, { is_sensitive: 1 });
+                        }
                     } else {
-                        console.warn(`Gagal Unblur. File asli hilang: ${originalFilePathAbsolute}`);
-                        await Item.updateDetails(itemId, { is_sensitive: 0 });
+                        if (fs.existsSync(originalFilePathAbsolute)) {
+                            const originalPathRelative = path.join(uploadDirRelative, originalFilename);
+
+                            await Item.updateDetails(itemId, {
+                                is_sensitive: 0,
+                                image_path: originalPathRelative
+                            });
+                        } else {
+                            console.warn(`Gagal Unblur. File asli hilang: ${originalFilePathAbsolute}`);
+                            await Item.updateDetails(itemId, { is_sensitive: 0 });
+                        }
                     }
                 }
             }
@@ -137,6 +156,115 @@ export const secureItem = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ status: 'error', message: 'Server Error' });
+    }
+};
+
+export const approveItemReport = async (req, res) => {
+    try {
+        const result = await Item.reviewReport(req.params.id, 'accepted', req.user.id);
+        if (result.affectedRows !== 1) {
+            const item = await Item.findById(req.params.id);
+            if (!item) {
+                return res.status(404).json({ status: 'error', message: 'Report not found' });
+            }
+            return res.status(409).json({ status: 'error', message: 'Only reports pending review can be accepted' });
+        }
+
+        logActivity(
+            { id: req.user.id, role: req.user.role, name: 'Admin' },
+            'APPROVE_ITEM_REPORT',
+            {
+                entity: 'Item',
+                entityId: req.params.id,
+                details: 'Item report accepted'
+            },
+            req
+        );
+
+        return res.json({
+            status: 'success',
+            message: 'Report accepted successfully',
+            data: await Item.findById(req.params.id)
+        });
+    } catch (error) {
+        console.error('Could not accept item report:', error);
+        return res.status(500).json({ status: 'error', message: 'Could not accept item report' });
+    }
+};
+
+export const rejectItemReport = async (req, res) => {
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+    if (!reason || reason.length > 255 || note.length > 2000) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'A rejection reason (max 255 characters) is required; the note must be 2000 characters or fewer'
+        });
+    }
+
+    try {
+        const result = await Item.rejectReport(req.params.id, req.user.id, reason, note);
+        if (result.affectedRows !== 1) {
+            const item = await Item.findById(req.params.id);
+            if (!item) {
+                return res.status(404).json({ status: 'error', message: 'Report not found' });
+            }
+            return res.status(409).json({ status: 'error', message: 'Only pending reports can be rejected' });
+        }
+
+        logActivity(
+            { id: req.user.id, role: req.user.role, name: 'Admin' },
+            'REJECT_ITEM_REPORT',
+            {
+                entity: 'Item',
+                entityId: req.params.id,
+                details: `Report rejected: ${reason}`
+            },
+            req,
+            { rejection_note: note || null }
+        );
+
+        return res.json({
+            status: 'success',
+            message: 'Report rejected successfully',
+            data: await Item.findById(req.params.id)
+        });
+    } catch (error) {
+        console.error('Could not reject item report:', error);
+        return res.status(500).json({ status: 'error', message: 'Could not reject item report' });
+    }
+};
+
+export const restoreRejectedItemReport = async (req, res) => {
+    try {
+        const result = await Item.restoreRejectedReport(req.params.id);
+        if (result.affectedRows !== 1) {
+            const item = await Item.findById(req.params.id);
+            if (!item) {
+                return res.status(404).json({ status: 'error', message: 'Report not found' });
+            }
+            return res.status(409).json({ status: 'error', message: 'Only rejected reports can be restored' });
+        }
+
+        logActivity(
+            { id: req.user.id, role: req.user.role, name: 'Admin' },
+            'RESTORE_ITEM_REPORT',
+            {
+                entity: 'Item',
+                entityId: req.params.id,
+                details: 'Rejected report restored to pending review'
+            },
+            req
+        );
+
+        return res.json({
+            status: 'success',
+            message: 'Report restored to pending review',
+            data: await Item.findById(req.params.id)
+        });
+    } catch (error) {
+        console.error('Could not restore rejected item report:', error);
+        return res.status(500).json({ status: 'error', message: 'Could not restore item report' });
     }
 };
 
@@ -218,7 +346,7 @@ export const createItemAdmin = async (req, res) => {
 export const getClaimsAdmin = async (req, res) => {
     // Ambil status dari query param, default 'pending' jika kosong
     // Opsi: 'all', 'pending', 'verified', 'rejected'
-    const status = req.query.status || 'pending';
+    const status = String(req.query.status || 'pending').toLowerCase();
 
     try {
         const claims = await Claim.findAllAdmin(status);
@@ -237,7 +365,11 @@ export const getClaimsAdmin = async (req, res) => {
 
 
 export const processClaim = async (req, res) => {
-    const { status } = req.body; 
+    const requestedStatus = String(req.body.status || req.body.decision || '').toLowerCase();
+    const status = ['approved', 'approve'].includes(requestedStatus)
+        ? 'verified'
+        : requestedStatus;
+    const reviewNote = req.body.review_note || req.body.reviewNote || req.body.reason || null;
     const claimId = req.params.id;
 
     if (!['verified', 'rejected'].includes(status)) {
@@ -245,7 +377,31 @@ export const processClaim = async (req, res) => {
     }
 
     try {
-        await Claim.updateStatus(claimId, status, req.user.id);
+        const result = await Claim.review(claimId, status, req.user.id, reviewNote);
+        if (result.error === 'item_unavailable') {
+            return res.status(409).json({
+                status: 'error',
+                message: 'Only secured found items can be approved'
+            });
+        }
+        if (result.error === 'item_already_approved') {
+            return res.status(409).json({
+                status: 'error',
+                message: 'Another claim for this item has already been approved'
+            });
+        }
+        if (result.error === 'claim_unavailable') {
+            return res.status(409).json({
+                status: 'error',
+                message: 'Claim was not found or is no longer awaiting review'
+            });
+        }
+        if (result.affectedRows !== 1) {
+            return res.status(409).json({
+                status: 'error',
+                message: 'Claim was not found or is no longer awaiting review'
+            });
+        }
 
         // removed premature Item.updateStatus(..., 'claimed') because item should only be 'claimed' when QR is validated
 

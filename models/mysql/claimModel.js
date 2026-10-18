@@ -1,5 +1,15 @@
 import db from '../../config/db_mysql.js';
 
+const withEvidenceUrl = (claim) => {
+    if (!claim) return claim;
+    const { evidence_path, ...safeClaim } = claim;
+    return {
+        ...safeClaim,
+        has_evidence: Boolean(evidence_path),
+        evidence_url: evidence_path ? `/api/claims/${claim.claim_id}/evidence` : null
+    };
+};
+
 const Claim = {
     // Membuat klaim baru
     create: async (claimData) => {
@@ -29,6 +39,49 @@ const Claim = {
         return result;
     },
 
+    createActive: async (claimData) => {
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+            const [items] = await connection.execute(
+                "SELECT item_id FROM item WHERE item_id = ? AND report_type = 'found' AND report_review_status = 'accepted' AND status = 'secured' FOR UPDATE",
+                [claimData.item_id]
+            );
+            if (items.length === 0) {
+                await connection.rollback();
+                return { error: 'item_unavailable' };
+            }
+
+            const [existing] = await connection.execute(
+                "SELECT claim_id FROM claim WHERE item_id = ? AND claimer_nim = ? AND status IN ('pending','verified','scheduled') LIMIT 1",
+                [claimData.item_id, claimData.claimer_nim]
+            );
+            if (existing.length > 0) {
+                await connection.rollback();
+                return { error: 'duplicate' };
+            }
+
+            const [result] = await connection.execute(
+                `INSERT INTO claim (
+                    claimer_nim, item_id, challange_answer, evidence_path, status, validator_nip, processed_at
+                ) VALUES (?, ?, ?, ?, 'pending', NULL, NULL)`,
+                [
+                    claimData.claimer_nim,
+                    claimData.item_id,
+                    claimData.challange_answer,
+                    claimData.evidence_path || null
+                ]
+            );
+            await connection.commit();
+            return { claim_id: result.insertId };
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    },
+
     // Mendapatkan detail klaim berdasarkan ID
     findById: async (id) => {
         const query = `
@@ -50,14 +103,14 @@ const Claim = {
             WHERE c.claim_id = ?
         `;
         const [rows] = await db.execute(query, [id]);
-        return rows[0];
+        return withEvidenceUrl(rows[0]);
     },
 
     // Mendapatkan klaim berdasarkan Item ID
     findByItemId: async (itemId) => {
         const query = 'SELECT * FROM claim WHERE item_id = ?';
         const [rows] = await db.execute(query, [itemId]);
-        return rows;
+        return rows.map(withEvidenceUrl);
     },
 
     findAllAdmin: async (status = 'all') => {
@@ -92,7 +145,15 @@ const Claim = {
         query += ' ORDER BY FIELD(c.status, "pending", "verified", "scheduled", "claimed", "rejected"), c.create_at ASC';
 
         const [rows] = await db.execute(query, params);
-        return rows;
+        return rows.map(withEvidenceUrl);
+    },
+
+    findEvidenceById: async (claimId) => {
+        const [rows] = await db.execute(
+            'SELECT claim_id, claimer_nim, evidence_path FROM claim WHERE claim_id = ?',
+            [claimId]
+        );
+        return rows[0];
     },
 
     findByClaimerNim: async (claimerNim) => {
@@ -116,29 +177,148 @@ const Claim = {
             ORDER BY c.create_at DESC
         `;
         const [rows] = await db.execute(query, [claimerNim]);
-        return rows;
+        return rows.map(withEvidenceUrl);
     },
 
     // Menjadwalkan pengambilan barang (FR-04)
     scheduleSlot: async (claimId, slotId, scheduledDate) => {
-        const query = `
-            UPDATE claim 
-            SET scheduled_slot_id = ?, scheduled_date = ?, status = 'scheduled'
-            WHERE claim_id = ?
-        `;
-        const [result] = await db.execute(query, [slotId, scheduledDate, claimId]);
-        return result;
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+            const [slots] = await connection.execute(
+                'SELECT max_quota, slot_date, day_of_week FROM pickup_slot WHERE slot_id = ? AND is_active = 1 FOR UPDATE',
+                [slotId]
+            );
+            if (slots.length === 0) {
+                await connection.rollback();
+                return { error: 'slot_unavailable' };
+            }
+            const dayOfWeek = [
+                'Sunday',
+                'Monday',
+                'Tuesday',
+                'Wednesday',
+                'Thursday',
+                'Friday',
+                'Saturday'
+            ][new Date(`${scheduledDate}T00:00:00Z`).getUTCDay()];
+            if (
+                (slots[0].slot_date && String(slots[0].slot_date).slice(0, 10) !== scheduledDate) ||
+                slots[0].day_of_week !== dayOfWeek
+            ) {
+                await connection.rollback();
+                return { error: 'slot_date_mismatch' };
+            }
+
+            const [claims] = await connection.execute(
+                "SELECT status, scheduled_slot_id, scheduled_date FROM claim WHERE claim_id = ? FOR UPDATE",
+                [claimId]
+            );
+            const claim = claims[0];
+            if (!claim || !['verified', 'scheduled'].includes(claim.status)) {
+                await connection.rollback();
+                return { error: 'claim_unavailable' };
+            }
+
+            const [bookings] = await connection.execute(
+                `SELECT COUNT(*) AS booked_count FROM claim
+                 WHERE scheduled_slot_id = ? AND scheduled_date = ?
+                   AND status IN ('scheduled','claimed') AND claim_id <> ?`,
+                [slotId, scheduledDate, claimId]
+            );
+            if (Number(bookings[0].booked_count) >= Number(slots[0].max_quota)) {
+                await connection.rollback();
+                return { error: 'slot_full' };
+            }
+
+            const [result] = await connection.execute(
+                `UPDATE claim
+                 SET scheduled_slot_id = ?, scheduled_date = ?, status = 'scheduled'
+                 WHERE claim_id = ? AND status IN ('verified','scheduled')`,
+                [slotId, scheduledDate, claimId]
+            );
+            if (result.affectedRows !== 1) {
+                await connection.rollback();
+                return { error: 'claim_unavailable' };
+            }
+            await connection.commit();
+            return result;
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
     },
 
-    updateStatus: async (claimId, newStatus, validatorNip) => {
+    updateStatus: async (claimId, newStatus, validatorNip, reviewNote = null) => {
         const processedAt = new Date();
         const query = `
             UPDATE claim 
-            SET status = ?, processed_at = ?, validator_nip = ?
-            WHERE claim_id = ?
+            SET status = ?, processed_at = ?, validator_nip = ?, review_note = ?
+            WHERE claim_id = ? AND status = 'pending'
         `;
-        const [result] = await db.execute(query, [newStatus, processedAt, validatorNip, claimId]);
+        const [result] = await db.execute(query, [
+            newStatus,
+            processedAt,
+            validatorNip,
+            reviewNote,
+            claimId
+        ]);
         return result;
+    },
+
+    review: async (claimId, newStatus, validatorNip, reviewNote = null) => {
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+            const [claims] = await connection.execute(
+                `SELECT c.item_id, c.status, i.status AS item_status, i.report_type, i.report_review_status
+                 FROM claim c JOIN item i ON i.item_id = c.item_id
+                 WHERE c.claim_id = ? FOR UPDATE`,
+                [claimId]
+            );
+            const claim = claims[0];
+            if (!claim || claim.status !== 'pending') {
+                await connection.rollback();
+                return { error: 'claim_unavailable' };
+            }
+            if (newStatus === 'verified') {
+                if (claim.item_status !== 'secured' || claim.report_type !== 'found' || claim.report_review_status !== 'accepted') {
+                    await connection.rollback();
+                    return { error: 'item_unavailable' };
+                }
+                const [approved] = await connection.execute(
+                    `SELECT claim_id FROM claim
+                     WHERE item_id = ? AND claim_id <> ?
+                       AND status IN ('verified','scheduled','claimed')
+                     LIMIT 1`,
+                    [claim.item_id, claimId]
+                );
+                if (approved.length > 0) {
+                    await connection.rollback();
+                    return { error: 'item_already_approved' };
+                }
+            }
+
+            const [result] = await connection.execute(
+                `UPDATE claim
+                 SET status = ?, processed_at = NOW(), validator_nip = ?, review_note = ?
+                 WHERE claim_id = ? AND status = 'pending'`,
+                [newStatus, validatorNip, reviewNote, claimId]
+            );
+            if (result.affectedRows !== 1) {
+                await connection.rollback();
+                return { error: 'claim_unavailable' };
+            }
+            await connection.commit();
+            return result;
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
     },
 
     // Generate QR Token
@@ -152,6 +332,53 @@ const Claim = {
         return result;
     },
 
+    issueQR: async (claimId, newToken, newExpiresAt) => {
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+            const [claims] = await connection.execute(
+                `SELECT status, qr_token, qr_expires_at
+                 FROM claim WHERE claim_id = ? FOR UPDATE`,
+                [claimId]
+            );
+            const claim = claims[0];
+            if (!claim || claim.status !== 'scheduled') {
+                await connection.rollback();
+                return { error: 'claim_unavailable' };
+            }
+
+            const now = Date.now();
+            const expiry = claim.qr_expires_at ? new Date(claim.qr_expires_at).getTime() : 0;
+            const ttl = Math.floor((expiry - now) / 1000);
+            if (claim.qr_token && ttl > 0 && ttl <= 30 * 60) {
+                await connection.commit();
+                return {
+                    qr_token: claim.qr_token,
+                    expires_at: claim.qr_expires_at,
+                    time_to_live_seconds: ttl,
+                    reused: true
+                };
+            }
+
+            await connection.execute(
+                'UPDATE claim SET qr_token = ?, qr_expires_at = ? WHERE claim_id = ?',
+                [newToken, newExpiresAt, claimId]
+            );
+            await connection.commit();
+            return {
+                qr_token: newToken,
+                expires_at: newExpiresAt,
+                time_to_live_seconds: 30 * 60,
+                reused: false
+            };
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    },
+
     // Find Claim by QR Token
     findByQRToken: async (token) => {
         const query = `
@@ -159,31 +386,42 @@ const Claim = {
             FROM claim c
             JOIN item i ON c.item_id = i.item_id
             JOIN general_user u ON c.claimer_nim = u.nim
-            WHERE c.qr_token = ?
+            WHERE c.qr_token = ? AND c.status = 'scheduled'
         `;
         const [rows] = await db.execute(query, [token]);
         return rows[0];
     },
 
     // Validate QR and Claim Item (Atomic Transaction)
-    validateQRAndClaimItem: async (claimId, itemId) => {
+    validateQRAndClaimItem: async (claimId, itemId, token) => {
         const connection = await db.getConnection();
         try {
             await connection.beginTransaction();
 
             const processedAt = new Date();
 
-            // 1. Update item status to 'claimed'
-            const updateItemQuery = `UPDATE item SET status = 'claimed' WHERE item_id = ?`;
-            await connection.execute(updateItemQuery, [itemId]);
+            const [claimResult] = await connection.execute(
+                `UPDATE claim
+                 SET status = 'claimed', processed_at = ?, qr_token = NULL, qr_expires_at = NULL
+                 WHERE claim_id = ? AND item_id = ? AND status = 'scheduled'
+                   AND qr_token = ? AND qr_expires_at > NOW()`,
+                [processedAt, claimId, itemId, token]
+            );
+            if (claimResult.affectedRows !== 1) {
+                await connection.rollback();
+                return false;
+            }
 
-            // 2. Update claim status to 'claimed', nullify qr_token
             const updateClaimQuery = `
-                UPDATE claim 
-                SET status = 'claimed', processed_at = ?, qr_token = NULL, qr_expires_at = NULL
-                WHERE claim_id = ?
+                UPDATE item SET status = 'claimed'
+                WHERE item_id = ? AND report_type = 'found'
+                  AND report_review_status = 'accepted' AND status = 'secured'
             `;
-            await connection.execute(updateClaimQuery, [processedAt, claimId]);
+            const [itemResult] = await connection.execute(updateClaimQuery, [itemId]);
+            if (itemResult.affectedRows !== 1) {
+                await connection.rollback();
+                return false;
+            }
 
             await connection.commit();
             return true;

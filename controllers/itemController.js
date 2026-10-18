@@ -5,31 +5,189 @@ import fs from 'fs';
 import path from 'path';
 import { logActivity } from '../utils/logger.js';
 
-// @desc    Get all items (with optional filters: status, category, date)
-// @route   GET /api/items
-// @access  Public
-export const getItems = async (req, res) => {
-    // Ambil parameter dari query URL
-    // Default status 'pending', tapi bisa di-override user (misal: ?status=all atau ?status=secured)
-    const status = req.query.status || 'pending'; 
-    
-    // Ambil filter tambahan
-    const { category_id, startDate, endDate } = req.query;
+const getReportFile = (req) =>
+    req.file || req.files?.image?.[0] || req.files?.photo?.[0] || null;
+
+const removeUpload = (filePath) => {
+    if (!filePath || !fs.existsSync(filePath)) return;
+    try {
+        fs.unlinkSync(filePath);
+    } catch (error) {
+        console.error(`Could not remove uploaded file ${filePath}:`, error);
+    }
+};
+
+const isValidDate = (value) => {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
+const getCategory = async (body) => {
+    const categoryId = body.category_id;
+    if (categoryId) return Category.findById(categoryId);
+
+    const requestedCategory = String(body.category || '').toLowerCase();
+    if (!['general', 'sensitive', 'umum'].includes(requestedCategory) &&
+        requestedCategory !== 'sensitif') return null;
+
+    const categories = await Category.findAll();
+    return categories.find(
+        (category) => Boolean(Number(category.default_sensitive)) ===
+            ['sensitive', 'sensitif'].includes(requestedCategory)
+    ) || null;
+};
+
+const storeItemReport = async (
+    req,
+    res,
+    { reportType = 'found', intake = false, requireTime = false } = {}
+) => {
+    const file = getReportFile(req);
+    const body = req.body || {};
+    const {
+        name,
+        description = '',
+        found_location,
+        location,
+        found_date,
+        date,
+        report_time,
+        time
+    } = body;
+
+    if (!file && !intake) {
+        return res.status(400).json({ status: 'error', message: 'A JPG or PNG photo is required' });
+    }
+    const reportDate = found_date || date || new Date().toISOString().slice(0, 10);
+    const reportTime = report_time || time || null;
+    const timePattern = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
+    if (
+        typeof name !== 'string' ||
+        !name.trim() ||
+        typeof (found_location || location) !== 'string' ||
+        !(found_location || location).trim() ||
+        !isValidDate(reportDate) ||
+        (requireTime && !timePattern.test(reportTime || '')) ||
+        (reportTime && !timePattern.test(reportTime))
+    ) {
+        removeUpload(file?.path);
+        return res.status(400).json({
+            status: 'error',
+            message: 'Name, location, and a valid YYYY-MM-DD report date are required'
+        });
+    }
 
     try {
-        // Bungkus filter dalam object
+        const category = await getCategory(body);
+        if (!category) {
+            removeUpload(file?.path);
+            return res.status(400).json({ status: 'error', message: 'A valid category is required' });
+        }
+
+        const sensitive = Boolean(Number(category.default_sensitive));
+        const blurredFilename = file ? `blur-${file.filename}` : null;
+        const blurredPath = file ? path.join(path.dirname(file.path), blurredFilename) : null;
+        const imagePath = !file
+            ? null
+            : sensitive
+                ? `public/uploads/${blurredFilename}`
+                : `public/uploads/${file.filename}`;
+
+        if (sensitive && file) {
+            await sharp(file.path).resize(500).blur(20).toFile(blurredPath);
+        }
+
+        const normalizedType = String(reportType).toLowerCase();
+        const report = {
+            finder_nim: intake ? null : req.user.id,
+            manage_nip: intake ? req.user.id : null,
+            report_type: normalizedType,
+            category_id: category.category_id,
+            name: name.trim(),
+            description: String(description).trim(),
+            found_location: (found_location || location).trim(),
+            is_sensitive: sensitive ? 1 : 0,
+            found_date: reportDate,
+            report_time: reportTime,
+            image_path: imagePath
+        };
+        report.report_review_status = intake ? 'accepted' : 'pending';
+
+        const result = intake
+            ? await Item.createByAdmin({ ...report, status: 'pending' })
+            : await Item.create(report);
+        const itemId = result.insertId;
+
+        logActivity(
+            {
+                id: req.user.id,
+                role: req.user.role,
+                name: intake ? 'Admin' : 'Mahasiswa'
+            },
+            intake ? 'RECORD_INTAKE' : 'REPORT_ITEM',
+            {
+                entity: 'Item',
+                entityId: itemId,
+                details: `${normalizedType} report: ${name}`
+            },
+            req
+        );
+
+        return res.status(201).json({
+            status: 'success',
+            message: intake ? 'Intake recorded successfully' : 'Item report submitted successfully',
+            data: { item_id: itemId, ...report, status: 'pending' }
+        });
+    } catch (error) {
+        if (file) {
+            removeUpload(file.path);
+            removeUpload(path.join(path.dirname(file.path), `blur-${file.filename}`));
+        }
+        console.error('Could not save item report:', error);
+        return res.status(500).json({ status: 'error', message: 'Could not save item report' });
+    }
+};
+
+export const getItems = async (req, res) => {
+    const status = String(req.query.status || 'catalog').toLowerCase();
+    const { category_id, startDate, endDate } = req.query;
+    const statusAliases = {
+        waiting_at_security: 'pending',
+        available: 'secured'
+    };
+    const requestedStatus = statusAliases[status] || status;
+    const category = String(req.query.category || '').toLowerCase();
+    const requestedType = String(req.query.report_type || req.query.type || 'all').toLowerCase();
+    const reportTypeAliases = { hilang: 'lost', temuan: 'found' };
+    const reportType = reportTypeAliases[requestedType] || requestedType;
+
+    if (
+        (startDate && !isValidDate(startDate)) ||
+        (endDate && !isValidDate(endDate)) ||
+        (reportType !== 'all' && !['found', 'lost'].includes(reportType)) ||
+        (category && !['general', 'sensitive', 'umum', 'sensitif'].includes(category))
+    ) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Invalid catalog filters'
+        });
+    }
+
+    try {
         const filters = {
             category_id,
+            category,
             startDate,
-            endDate
+            endDate,
+            search: req.query.search || req.query.q,
+            report_type: reportType
         };
 
-        // Panggil model dengan status dan filters
-        const items = await Item.findAll(status, filters);
-        
+        const items = await Item.findAll(requestedStatus, filters);
         res.json({ 
-            status: 'success', 
-            count: items.length, // Tambahkan info jumlah data
+            status: 'success',
+            count: items.length,
             data: items 
         });
     } catch (error) {
@@ -38,12 +196,10 @@ export const getItems = async (req, res) => {
     }
 };
 
-// ... (Sisa fungsi getItemById dan createItem tetap sama) ...
-
 export const getItemById = async (req, res) => {
     try {
         const item = await Item.findById(req.params.id);
-        if (item) {
+        if (item && item.report_review_status === 'accepted') {
             res.json({ status: 'success', data: item });
         } else {
             res.status(404).json({ status: 'error', message: 'Item not found' });
@@ -55,72 +211,20 @@ export const getItemById = async (req, res) => {
 };
 
 export const createItem = async (req, res) => {
-    try {
-        const { category_id, name, description, found_location, found_date } = req.body;
-        const file = req.file;
-
-        if (!file) {
-            return res.status(400).json({ status: 'error', message: 'Please upload an image' });
-        }
-
-        const category = await Category.findById(category_id);
-        if (!category) {
-            return res.status(400).json({ status: 'error', message: 'Invalid category ID' });
-        }
-
-        const isSensitiveBool = category.default_sensitive === 1;
-
-        let finalImagePath = `public/uploads/${file.filename}`;
-
-        if (isSensitiveBool) {
-            const blurredFilename = `blur-${file.filename}`;
-            const blurredPath = `public/uploads/${blurredFilename}`;
-            
-            await sharp(file.path)
-                .resize(500)
-                .blur(20)
-                .toFile(blurredPath);
-            
-            finalImagePath = blurredPath;
-        }
-
-
-        const newItem = {
-            finder_nim: req.user.id,
-            category_id,
-            name,
-            description,
-            found_location,
-            is_sensitive: isSensitiveBool ? 1 : 0,
-            found_date,
-            image_path: finalImagePath
-        };
-
-        const result = await Item.create(newItem);
-
-        // --- LOG ACTIVITY ---
-        // req.user.id adalah NIM (dari middleware protect)
-        // Kita butuh nama user, tapi di req.user mungkin cuma ada ID & Role.
-        // Opsi: Fetch user lagi atau simpan nama di token. 
-        // Untuk efisiensi, kita bisa pakai 'User' string saja atau fetch jika perlu.
-        // Di sini saya asumsikan cukup ID dulu atau Anda bisa update middleware auth untuk include nama.
-        
-        logActivity(
-            { id: req.user.id, role: 'user', name: 'Mahasiswa' }, // Idealnya ambil nama asli
-            'REPORT_ITEM',
-            { entity: 'Item', entityId: result.insertId, details: name },
-            req
-        );
-        // --------------------
-
-        res.status(201).json({
-            status: 'success',
-            message: 'Item reported successfully',
-            data: { item_id: result.insertId, ...newItem }
-        });
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ status: 'error', message: 'Server Error' });
-    }
+    return storeItemReport(req, res, { reportType: 'found' });
 };
+
+export const createItemReport = async (req, res) => {
+    const body = req.body || {};
+    const reportType = String(body.type || body.reportType || body.report_type || '').toLowerCase();
+    if (!['found', 'lost'].includes(reportType)) {
+        const file = getReportFile(req);
+        if (file) removeUpload(file.path);
+        return res.status(400).json({ status: 'error', message: 'Report type must be "found" or "lost"' });
+    }
+
+    return storeItemReport(req, res, { reportType, requireTime: true });
+};
+
+export const createIntake = async (req, res) =>
+    storeItemReport(req, res, { reportType: 'found', intake: true, requireTime: true });

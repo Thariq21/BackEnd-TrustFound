@@ -17,6 +17,11 @@ import categoryRoutes from "./routes/categoryRoutes.js";
 import claimV2Routes from "./routes/claimV2Routes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import slotRoutes from "./routes/slotRoutes.js";
+import scheduleRoutes from "./routes/scheduleRoutes.js";
+import profileRoutes from "./routes/profileRoutes.js";
+import homeRoutes from "./routes/homeRoutes.js";
+import ticketRoutes from "./routes/ticketRoutes.js";
+import intakeRoutes from "./routes/intakeRoutes.js";
 
 // --- IMPORT CRON JOB ---
 import initCronJobs from "./services/cronService.js";
@@ -52,6 +57,11 @@ app.use("/api/auth", authRoutes);
 app.use("/api/items", itemRoutes);
 app.use("/api/claims", claimRoutes);
 app.use("/api/slots", slotRoutes);
+app.use("/api/schedules", scheduleRoutes);
+app.use("/api/profile", profileRoutes);
+app.use("/api/home", homeRoutes);
+app.use("/api/tickets", ticketRoutes);
+app.use("/api/intake", intakeRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/categories", categoryRoutes);
 
@@ -102,6 +112,18 @@ app.use((req, res, next) => {
 
 // Global Error Handler
 app.use((err, req, res, next) => {
+  if (err.name === "MulterError") {
+    const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+    return res.status(status).json({
+      status: "error",
+      message: err.code === "LIMIT_FILE_SIZE"
+        ? "Image must be 5 MB or smaller"
+        : err.message,
+    });
+  }
+  if (err.message === "Only JPG and PNG images are allowed") {
+    return res.status(400).json({ status: "error", message: "Only JPG and PNG images are allowed" });
+  }
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   res.status(statusCode);
   res.json({

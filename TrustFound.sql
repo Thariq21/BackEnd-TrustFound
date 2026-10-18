@@ -79,6 +79,8 @@ CREATE TABLE `claim` (
   `item_id` int(11) NOT NULL,
   `create_at` datetime NOT NULL DEFAULT current_timestamp(),
   `challange_answer` text NOT NULL,
+  `review_note` text DEFAULT NULL,
+  `evidence_path` varchar(512) DEFAULT NULL,
   `scheduled_slot_id` int(11) DEFAULT NULL,
   `scheduled_date` date DEFAULT NULL,
   `status` enum('pending','verified','scheduled','rejected','claimed') DEFAULT 'pending',
@@ -145,6 +147,8 @@ INSERT INTO `general_user` (`nim`, `univ_id`, `full_name`, `email`, `phone_numbe
 CREATE TABLE `item` (
   `item_id` int(11) NOT NULL,
   `finder_nim` int(11) DEFAULT NULL,
+  `report_type` enum('found','lost') NOT NULL DEFAULT 'found',
+  `report_review_status` enum('pending','accepted','rejected') NOT NULL DEFAULT 'accepted',
   `manage_nip` int(11) DEFAULT NULL,
   `category_id` int(11) NOT NULL,
   `name` varchar(255) NOT NULL,
@@ -152,8 +156,14 @@ CREATE TABLE `item` (
   `found_location` varchar(255) NOT NULL,
   `is_sensitive` tinyint(1) NOT NULL,
   `found_date` date NOT NULL,
-  `image_path` varchar(255) NOT NULL,
-  `status` enum('pending','secured','claimed','donated') NOT NULL
+  `report_time` time DEFAULT NULL,
+  `image_path` varchar(255) DEFAULT NULL,
+  `status` enum('pending','secured','claimed','donated') NOT NULL,
+  `reviewed_by` int(11) DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `rejection_reason` varchar(255) DEFAULT NULL,
+  `rejection_note` text DEFAULT NULL,
+  KEY `idx_item_review_status` (`report_review_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
