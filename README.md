@@ -1,107 +1,378 @@
-# 🔍 TrustFound Backend API v2.0
+# TrustFound Backend API
 
-Selamat datang di repositori backend **TrustFound**, sebuah solusi backend RESTful yang profesional dan aman untuk sistem **Lost & Found** kampus modern.
+Backend REST API untuk sistem **UBLost&Found**. API ini mengelola akun mahasiswa, laporan barang hilang/temuan, moderasi admin, klaim barang, jadwal pengambilan, QR e-ticket, notifikasi, dan audit log.
 
-Repositori ini dirancang menggunakan arsitektur **Hybrid Database** (MySQL & MongoDB) untuk mengoptimalkan pengelolaan data relasional transaksi dan pencatatan log aktivitas yang efisien. Pada versi 2.0 ini, kami menghadirkan pembaruan signifikan untuk meningkatkan keamanan klaim, skalabilitas notifikasi, dan kenyamanan pengguna.
+## Daftar Isi
 
----
+- [Gambaran singkat](#gambaran-singkat)
+- [Menjalankan dengan Docker](#menjalankan-dengan-docker-rekomendasi)
+- [Menjalankan secara lokal](#menjalankan-secara-lokal)
+- [Konfigurasi environment](#konfigurasi-environment)
+- [Dokumentasi interaktif](#dokumentasi-interaktif)
+- [Konsep penting](#konsep-penting)
+- [Autentikasi JWT](#autentikasi-jwt)
+- [Contoh penggunaan](#contoh-penggunaan)
+- [Daftar endpoint](#daftar-endpoint)
+- [Upload file dan privasi](#upload-file-dan-privasi)
+- [Testing E2E](#testing-e2e)
+- [Struktur folder](#struktur-folder)
 
-## ✨ Fitur Baru di v2.0 (Highlights)
+## Gambaran singkat
 
-* **Blind Listing & Smart Verification [MVP]:** Melindungi privasi barang sensitif (seperti KTP, Dompet) dengan fitur *auto-blur* gambar otomatis dan mengamankan proses klaim barang temuan.
-* **QR Code E-Ticket (FR-01):** Menggantikan verifikasi nama manual. Sistem menghasilkan token kriptografi (via native Node.js `crypto`) dengan Time-to-Live (TTL) 30 menit untuk penyerahan barang (handover) fisik yang sangat aman di pos satpam.
-* **Asynchronous Email & Cron Job (FR-02):** Menggunakan pola *Fire-and-Forget* melalui Nodemailer untuk mengirim email transaksional dan *broadcast* tanpa memblokir *thread* utama API. Juga dilengkapi Cron Job harian otomatis untuk mengarsipkan barang yang sudah lama.
+### Teknologi
 
----
+- Node.js 20 dan Express 5
+- MariaDB/MySQL untuk data transaksi
+- MongoDB untuk audit log dan email log
+- JWT dan bcrypt untuk autentikasi
+- Multer dan Sharp untuk upload serta blur gambar sensitif
+- Nodemailer untuk email dan node-cron untuk pekerjaan terjadwal
 
-## 🛠 Tech Stack
+### Base URL
 
-* **Runtime:** Node.js, Express.js
-* **Hybrid Database:** 
-  * **MySQL:** Data transaksional utama (Users, Items, Claims, Admin).
-  * **MongoDB:** Menyimpan *Audit Trails* dan *Email Logs*.
-* **Security:** JWT (JSON Web Token), Bcrypt, native Node.js `crypto`.
-* **Automation & Services:** `nodemailer` (Email Service), `node-cron` (Job Scheduling).
-* **Image Processing:** Sharp (untuk fitur *auto-blur*).
+Jika dijalankan lokal atau dengan Docker:
 
----
-
-## 🚀 Cara Menjalankan (Local Setup)
-
-Ikuti langkah-langkah berikut untuk menjalankan server di mesin lokal Anda.
-
-### 1. Clone Repository
-
-```bash
-git clone https://github.com/Thariq21/BackEnd-TrustFound
-cd BackEnd-TrustFound
+```text
+http://localhost:5000
 ```
 
-### 2. Install Dependencies
+Semua endpoint API menggunakan prefix `/api`, misalnya `POST /api/auth/login`.
 
-```bash
+## Menjalankan dengan Docker (rekomendasi)
+
+Dari folder root proyek `Capstone-Project`:
+
+```powershell
+docker compose up --build
+```
+
+Perintah tersebut menjalankan:
+
+- Backend pada `http://localhost:5000`
+- Frontend pada `http://localhost:8080`
+- MariaDB pada port `3306`
+- MongoDB audit di jaringan Docker internal
+
+Database dan migrasi dijalankan otomatis ketika volume database dibuat pertama kali. Jika ingin mengulang inisialisasi database dari awal, hentikan layanan lalu hapus **volume Docker proyek** yang memang ingin di-reset; tindakan ini menghapus data database lokal.
+
+Uji status backend:
+
+```powershell
+curl http://localhost:5000/health
+```
+
+Response yang diharapkan:
+
+```json
+{ "status": "ok" }
+```
+
+## Menjalankan secara lokal
+
+### Prasyarat
+
+- Node.js 20 atau lebih baru
+- MySQL/MariaDB yang sudah berjalan
+- MongoDB yang sudah berjalan
+- Database MySQL sudah dibuat
+
+### Instalasi
+
+```powershell
+cd BackEnd-TrustFound
 npm install
 ```
 
-### 3. Konfigurasi Environment (CRITICAL)
+Salin `config/config.env.example` jika file contoh tersedia. Jika tidak, buat file `BackEnd-TrustFound/config/config.env` secara manual menggunakan contoh pada bagian [Konfigurasi environment](#konfigurasi-environment). Jangan menaruh kredensial di README atau melakukan commit terhadap file konfigurasi berisi secret.
 
-**PENTING:** Variabel environment **WAJIB** ditempatkan di dalam file `config/config.env` (BUKAN di root folder `.env`).
+Jalankan skema dasar dan migrasi SQL berikut secara berurutan:
 
-Buat folder `config` (jika belum ada) dan buat file `config.env` di dalamnya. Copy dan paste snippet berikut:
+1. `TrustFound.sql`
+2. `migrations/001_pickup_slots_and_schedule.sql`
+3. `migrations/002_frontend_business_flow.sql`
+4. `migrations/003_frontend_report_moderation.sql`
+
+Jalankan server:
+
+```powershell
+npm run dev
+```
+
+Untuk menjalankan tanpa Nodemon:
+
+```powershell
+npm start
+```
+
+## Konfigurasi environment
+
+File yang dibaca aplikasi adalah `config/config.env`.
 
 ```env
 PORT=5000
 NODE_ENV=development
-JWT_SECRET=your_jwt_secret
+JWT_SECRET=ganti-dengan-secret-yang-kuat
 
 DB_HOST=localhost
+DB_PORT=3306
 DB_USER=root
-DB_PASS=your_mysql_password
+DB_PASS=password_mysql
 DB_NAME=trustfound
 
-MONGO_URI=mongodb+srv://<username>:<password>@cluster0.urtbfil.mongodb.net
+MONGO_URI=mongodb://localhost:27017
 MONGO_DB_NAME=trustfound
+
+CORS_ORIGINS=http://localhost:8080,http://localhost:5173
+SERVER_BASE_URL=http://localhost:5000
 
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USER=your_email@gmail.com
-SMTP_PASS=your_app_password
+SMTP_USER=alamat-email-gmail
+SMTP_PASS=gmail-app-password
 ```
 
-### 4. Jalankan Server
+Keterangan:
 
-**Mode Development (Auto-restart dengan Nodemon):**
-```bash
-npm run dev
+- `JWT_SECRET` wajib sama selama token masih digunakan dan harus berbeda untuk production.
+- `CORS_ORIGINS` berisi daftar origin yang dipisahkan koma.
+- `SERVER_BASE_URL` dipakai saat membuat URL gambar pada email.
+- `SMTP_*` dipakai untuk email transaksi dan broadcast.
+- Set `DISABLE_EMAILS=true` hanya untuk development atau testing lokal.
+- Pada Docker Compose, nilai koneksi database sudah disediakan oleh `docker-compose.yml`; jangan gunakan `localhost` untuk host database dari dalam container backend.
+- Untuk Gmail, gunakan **App Password**, bukan password login Gmail biasa. Simpan nilai ini di `config/config.env` lokal atau environment Docker dan jangan commit ke repository.
+
+### Notifikasi email otomatis
+
+Email dikirim secara asynchronous sehingga response API tidak menunggu proses SMTP selesai. Setiap email berhasil/gagal dicatat di koleksi MongoDB `email_logs`.
+
+- Barang baru yang sudah diamankan (`secured`) dibroadcast ke seluruh email mahasiswa. Ini berlaku untuk pengamanan satu item, upload langsung oleh admin, dan batch secure.
+- Saat mahasiswa mengajukan klaim, mahasiswa menerima konfirmasi dan seluruh admin yang memiliki email menerima notifikasi untuk review.
+- Saat klaim disetujui/ditolak, mahasiswa menerima hasil keputusan.
+- Saat jadwal pickup dibuat, mahasiswa menerima tanggal, waktu, dan lokasi.
+- Saat admin mengubah slot yang sedang dipakai oleh klaim terjadwal, mahasiswa terkait menerima email jadwal terbaru.
+- Setelah QR berhasil divalidasi, mahasiswa menerima tanda terima handover.
+
+Jika `DISABLE_EMAILS=true`, tidak ada email yang dikirim. Pastikan `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, dan `SMTP_PASS` tersedia sebelum mengaktifkan pengiriman.
+
+## Dokumentasi interaktif
+
+Setelah server hidup, buka:
+
+- **Scalar API Reference:** `http://localhost:5000/reference`
+- **OpenAPI JSON:** `http://localhost:5000/openapi.json`
+
+Di Scalar, pilih endpoint, klik **Authorize**, masukkan token JWT, lalu jalankan request langsung dari browser. Spesifikasi sumbernya berada di [`docs/openapi.json`](./docs/openapi.json).
+
+## Konsep penting
+
+### Peran pengguna
+
+- **Mahasiswa:** mendaftar, login, melihat katalog, mengirim laporan, mengajukan klaim, dan menjadwalkan pengambilan.
+- **Satpam/Admin:** login, meninjau laporan, mengamankan barang, memproses klaim, mengelola slot, memvalidasi QR, melihat dashboard/audit, dan mengirim broadcast.
+
+Token admin dapat memiliki role backend `admin`, `super_admin`, `satpam`, atau `ADMIN_BEM`. Semua role tersebut diterima oleh middleware admin.
+
+### Status laporan dan status fisik
+
+Keduanya berbeda:
+
+1. Laporan mahasiswa dibuat dengan `report_review_status=pending`.
+2. Admin menerima (`accepted`) atau menolak (`rejected`) laporan.
+3. Menerima laporan **tidak** berarti barang sudah diamankan.
+4. Barang temuan yang diterima harus diproses admin dari `pending` menjadi `secured`.
+5. Hanya barang temuan `secured` yang dapat diklaim.
+
+Barang yang tidak diklaim lebih dari 90 hari dapat dipindahkan otomatis ke status `donated` oleh cron job.
+
+## Autentikasi JWT
+
+1. Panggil endpoint login.
+2. Ambil nilai `token` dari response.
+3. Kirim token pada setiap endpoint privat:
+
+```http
+Authorization: Bearer <JWT_TOKEN>
 ```
 
-**Mode Production:**
-```bash
-npm start
+Jika header tidak ada atau token tidak valid, API mengembalikan `401`. Jika token mahasiswa dipakai pada endpoint admin, API mengembalikan `403`.
+
+## Contoh penggunaan
+
+### 1. Registrasi dan login mahasiswa
+
+```powershell
+curl -X POST http://localhost:5000/api/auth/register `
+  -H "Content-Type: application/json" `
+  -d '{"nim":"1232001011","full_name":"Thariq Rahman","email":"1232001011@student.bakrie.ac.id","phone_number":"0881024468406","password":"secret123"}'
 ```
 
-Server akan berjalan di: `http://localhost:5000`
+```powershell
+curl -X POST http://localhost:5000/api/auth/login `
+  -H "Content-Type: application/json" `
+  -d '{"nim":"1232001011","password":"secret123"}'
+```
 
-### Migrasi skema untuk frontend
+Simpan `token` dari response login ke variabel PowerShell:
 
-Database lama harus menjalankan migrasi `001_pickup_slots_and_schedule.sql`, `002_frontend_business_flow.sql`, lalu `003_frontend_report_moderation.sql` setelah skema dasar tersedia. Migrasi menambahkan dukungan slot bertanggal, laporan hilang/temuan, bukti klaim privat, serta status moderasi laporan yang terpisah dari status fisik barang. Laporan mahasiswa dimulai sebagai `report_review_status=pending`, disetujui menjadi `accepted`, atau ditolak menjadi `rejected`; persetujuan tidak mengamankan barang. Hanya laporan accepted yang muncul di katalog publik, dan barang temuan tetap harus diamankan (`status=secured`) sebelum dapat diklaim. Database baru yang dibuat dari `TrustFound.sql` tetap perlu menjalankan migrasi tersebut untuk tabel dan kolom jadwal.
+```powershell
+$token = "<JWT_TOKEN>"
+```
 
----
+Login admin dapat dilakukan dengan salah satu cara berikut:
 
-## 🧪 Cara Testing API (E2E & Postman)
+```powershell
+curl -X POST http://localhost:5000/api/auth/admin/login `
+  -H "Content-Type: application/json" `
+  -d '{"nip":"<NIP>","password":"<PASSWORD>"}'
+```
 
-Suite `frontend_business_flow.e2e.js` exercises login, lost/found reporting, public visibility before/after moderation, approval without changing physical status, rejection/restoration, item securing, optional-photo intake, batch securing, claims, admin review, slot availability and booking, ticket issuance/validation, profile, dashboard, and audit filters.
+atau login melalui `POST /api/auth/login` dengan field `nim` berisi NIP admin.
 
-It only runs against a local, disposable database whose MySQL and MongoDB database names end in `_e2e`. The backend server and test runner must use the same local test database configuration, and migrations `001` through `003` must already be applied. It refuses to run unless `E2E_ALLOW_MUTATIONS=true` is explicitly set. On completion or failure, it removes its unique test users, reports, claims, pickup slot, uploaded images, and audit records.
+### 2. Melihat katalog
 
-Start the local backend from a PowerShell session with email delivery disabled:
+```powershell
+curl "http://localhost:5000/api/items?report_type=found&search=dompet"
+```
+
+Filter yang tersedia antara lain `status`, `category_id`, `category`, `report_type`/`type`, `startDate`, `endDate`, `search`/`q`. Format tanggal adalah `YYYY-MM-DD`.
+
+### 3. Mengirim laporan barang
+
+Endpoint ini menggunakan `multipart/form-data`. Field foto wajib bernama `image` atau `photo` dan maksimal 5 MB, JPG/PNG.
+
+```powershell
+curl -X POST http://localhost:5000/api/items/reports `
+  -H "Authorization: Bearer $token" `
+  -F "name=Dompet hitam" `
+  -F "description=Dompet kulit dengan kartu mahasiswa" `
+  -F "found_location=Perpustakaan lantai 2" `
+  -F "category_id=1" `
+  -F "found_date=2026-10-20" `
+  -F "report_type=found" `
+  -F "photo=@C:\path\dompet.jpg"
+```
+
+`report_type` dapat berupa `found` atau `lost`. Foto laporan mahasiswa wajib dikirim; intake admin adalah pengecualian karena foto bersifat opsional.
+
+### 4. Mengajukan klaim
+
+Barang harus sudah berstatus `secured`. Untuk endpoint yang memakai `:itemId`, kirim dua jawaban verifikasi sebagai array JSON. Bukti bersifat opsional dan field-nya `evidence`.
+
+```powershell
+curl -X POST http://localhost:5000/api/items/123/claims `
+  -H "Authorization: Bearer $token" `
+  -F 'answers=["Ciri khusus: goresan di bagian depan","Isi dompet: kartu mahasiswa"]' `
+  -F "evidence=@C:\path\bukti.jpg"
+```
+
+Alternatif endpoint legacy `POST /api/claims` menerima `item_id` di form body. Riwayat klaim tersedia di `GET /api/claims/my`.
+
+### 5. Alur admin dan QR handover
+
+1. Admin menerima laporan: `PATCH /api/admin/items/:id/approve`.
+2. Admin mengamankan barang: `PUT /api/admin/items/:id/secure` dengan body JSON opsional `{"is_sensitive":true}`.
+3. Admin memproses klaim: `PUT /api/admin/claims/:id/process` atau `PATCH /api/claims/:id`.
+4. Mahasiswa memilih slot dari `GET /api/slots?date=YYYY-MM-DD`.
+5. Mahasiswa membuat jadwal melalui `POST /api/schedules` atau `POST /api/claims/:id/schedule`.
+6. Mahasiswa mengambil QR melalui `GET /api/tickets/:claimId` atau `GET /api/v2/claims/:claimId/qr-token`.
+7. Satpam memvalidasi QR melalui `POST /api/tickets/validate` atau `POST /api/v2/claims/validate-qr`.
+
+Token QR berlaku maksimal 30 menit dan hanya dapat digunakan oleh admin/satpam untuk handover.
+
+## Daftar endpoint
+
+Semua endpoint di bawah ini menggunakan prefix `/api`.
+
+### Publik dan autentikasi
+
+| Method | Endpoint | Keterangan |
+| --- | --- | --- |
+| GET | `/` | Pesan status API |
+| GET | `/health` | Health check |
+| POST | `/auth/register` | Registrasi mahasiswa |
+| POST | `/auth/login` | Login mahasiswa atau admin |
+| POST | `/auth/admin/login` | Login admin/satpam |
+| GET | `/items` | Katalog publik |
+| GET | `/items/:id` | Detail item |
+| GET | `/categories` | Daftar kategori |
+| GET | `/home` | Ringkasan katalog |
+| GET | `/slots` | Slot pickup publik |
+| GET | `/slots/:id` | Detail slot |
+
+### Mahasiswa/user
+
+| Method | Endpoint | Keterangan |
+| --- | --- | --- |
+| POST | `/items` | Laporan barang temuan dengan field `image` |
+| POST | `/items/reports` | Laporan hilang/temuan dengan field `image` atau `photo` |
+| POST | `/items/:itemId/claims` | Klaim item dengan jawaban dan bukti opsional |
+| GET | `/claims` | Klaim milik user; admin mendapat daftar klaim admin |
+| POST | `/claims` | Klaim legacy dengan `item_id` |
+| GET | `/claims/my` | Riwayat klaim sendiri |
+| POST | `/claims/:id/schedule` | Jadwalkan pengambilan |
+| GET | `/profile` | Profil, laporan, dan riwayat klaim |
+| POST | `/schedules` | Jadwalkan pengambilan |
+| GET | `/tickets/:claimId` | Ambil/generate tiket QR |
+| GET | `/v2/claims/:claimId/qr-token` | Ambil/generate token QR V2 |
+
+### Admin/satpam
+
+| Method | Endpoint | Keterangan |
+| --- | --- | --- |
+| GET | `/admin/dashboard` atau `/admin/dashboard/stats` | Statistik dashboard |
+| GET | `/admin/items` | Semua item dan filter admin |
+| POST | `/admin/items` | Catat item langsung sebagai admin |
+| PUT | `/admin/items/:id/secure` | Ubah item pending menjadi secured |
+| PUT | `/admin/items/batch-secure` | Amankan beberapa item sekaligus |
+| PATCH | `/admin/items/:id/approve` | Terima laporan |
+| PATCH | `/admin/items/:id/reject` | Tolak laporan |
+| PATCH | `/admin/items/:id/restore` | Pulihkan laporan ditolak |
+| GET | `/admin/claims` | Daftar klaim |
+| PUT | `/admin/claims/:id/process` | Setujui/tolak klaim |
+| PATCH | `/claims/:id` | Setujui/tolak klaim legacy |
+| GET | `/claims/:id/evidence` | Ambil bukti klaim privat |
+| GET | `/admin/slots` | Kelola slot |
+| POST | `/admin/slots` | Buat slot |
+| PATCH | `/admin/slots/:id` | Ubah slot |
+| DELETE | `/admin/slots/:id` | Nonaktifkan slot |
+| GET | `/admin/audit` atau `/admin/logs` | Audit log dengan filter |
+| GET | `/admin/reports/monthly` | Download laporan PDF; dukung `startDate` dan `endDate` |
+| POST | `/intake` | Intake barang temuan, foto opsional |
+| POST | `/tickets/validate` | Validasi QR dan catat handover |
+| POST | `/v2/claims/validate-qr` | Validasi QR V2 |
+| POST | `/v2/notifications/broadcast` | Broadcast email ke user |
+
+## Upload file dan privasi
+
+- File gambar publik hanya menerima JPG/PNG dan maksimal 5 MB.
+- Gambar publik disimpan di `public/uploads` dan dapat diakses melalui `/uploads/<filename>`.
+- Bukti klaim disimpan di `private/evidence`; gunakan endpoint admin untuk mengambilnya, bukan URL publik.
+- Kategori sensitif dapat menghasilkan gambar blur otomatis dengan Sharp.
+- Admin dapat mengubah `is_sensitive` saat mengamankan item.
+
+Response error umumnya berbentuk:
+
+```json
+{
+  "status": "error",
+  "message": "Penjelasan error"
+}
+```
+
+Validation error juga memiliki array `errors`. Status yang sering muncul adalah `400` (input salah), `401` (belum login/token salah), `403` (role tidak sesuai), `404` (data tidak ditemukan), `409` (konflik status), dan `413` (file terlalu besar).
+
+## Testing E2E
+
+Test bisnis frontend memerlukan database lokal disposable. Test menolak berjalan jika database bukan lokal atau nama database tidak berakhiran `_e2e`.
+
+Jalankan backend pada terminal pertama:
 
 ```powershell
 $env:DISABLE_EMAILS = 'true'
 npm start
 ```
 
-In a second PowerShell session, set the explicit test opt-in and run the suite:
+Jalankan test pada terminal kedua:
 
 ```powershell
 $env:DISABLE_EMAILS = 'true'
@@ -110,120 +381,26 @@ $env:E2E_BASE_URL = 'http://localhost:5000'
 npm run test:e2e:frontend
 ```
 
-Do not point the backend or test runner at a development, shared, or production database. The suite does not create or migrate databases.
+Migrasi harus sudah diterapkan dan backend/test runner harus menggunakan database `_e2e` yang sama. Test tidak membuat atau memigrasikan database. Jangan menjalankannya pada database development bersama atau production.
 
-### Menggunakan Postman / Insomnia
-Jika Anda ingin melakukan testing manual:
-1. Panggil *endpoint* Login (`POST /api/auth/login`).
-2. Salin token `JWT` yang didapatkan dari *response*.
-3. Masukkan token tersebut di menu **Authorization -> Bearer Token** pada aplikasi Postman Anda sebelum memanggil *endpoint* yang berstatus `Private/User/Admin`.
-
----
-
-## 📂 Struktur Folder Utama
+## Struktur folder
 
 ```text
-trustfound-backend/
-├── config/             # Konfigurasi DB (MySQL & Mongo) & file config.env
-├── controllers/        # Logika bisnis (Auth, Item, Claim, Admin, Log, Notification)
-├── middleware/         # Auth protect, upload foto, validasi input
-├── models/
-│   ├── mysql/          # Model data relasional transaksi
-│   └── mongo/          # Model log aktivitas & email logs
-├── routes/             # Definisi endpoint API v1 dan v2
-├── services/           # Service eksternal (Email Async, Cron Jobs)
-└── public/uploads/     # Tempat penyimpanan file foto barang
+BackEnd-TrustFound/
+├── app.js                 # Inisialisasi Express dan mounting route
+├── config/                # Koneksi database dan config.env
+├── controllers/           # Logika bisnis
+├── docs/openapi.json      # Spesifikasi OpenAPI
+├── middleware/            # JWT, upload, dan validasi
+├── migrations/            # Migrasi skema database
+├── models/mysql/          # Model transaksi MySQL/MariaDB
+├── models/mongo/          # Model audit log MongoDB
+├── routes/                # Definisi endpoint
+├── services/              # Email dan cron job
+├── public/uploads/        # Gambar publik
+└── private/evidence/      # Bukti klaim privat
 ```
 
----
+## Lisensi dan kontak
 
-## 📡 API Endpoints Reference
-
-### 1. Authentication (Auth)
-| Method | Endpoint | Deskripsi | Akses |
-| --- | --- | --- | --- |
-| `POST` | `/api/auth/register` | Daftar akun mahasiswa baru | Public |
-| `POST` | `/api/auth/login` | Login mahasiswa (mendapatkan token) | Public |
-| `POST` | `/api/auth/admin/login` | Login admin/satpam (mendapatkan token) | Public |
-
-### 2. Items (Barang Temuan)
-| Method | Endpoint | Deskripsi | Akses |
-| --- | --- | --- | --- |
-| `POST` | `/api/items` | Lapor barang temuan (Upload Foto) | User |
-| `GET` | `/api/items` | Lihat daftar barang (Support Filter) | Public |
-| `GET` | `/api/items/:id` | Lihat detail satu barang | Public |
-| `POST` | `/api/items/reports` | Kirim laporan hilang/temuan dengan field foto `photo` atau `image` | User |
-
-### 3. Claims (Klaim Barang)
-| Method | Endpoint | Deskripsi | Akses |
-| --- | --- | --- | --- |
-| `POST` | `/api/claims` | Ajukan klaim barang | User |
-| `GET` | `/api/claims/my` | Lihat riwayat klaim saya | User |
-| `POST` | `/api/items/:itemId/claims` | Ajukan klaim barang temuan yang sudah diamankan | User |
-| `GET` | `/api/claims` | Lihat klaim sendiri; admin mendapat daftar klaim untuk review | User/Admin |
-| `PATCH` | `/api/claims/:id` | Setujui (`APPROVED`/`verified`) atau tolak (`rejected`) klaim | Admin |
-| `GET` | `/api/claims/:id/evidence` | Ambil bukti klaim melalui endpoint terlindungi | Admin |
-
-### Moderasi laporan barang
-| Method | Endpoint | Kegunaan | Akses |
-| --- | --- | --- | --- |
-| `PATCH` | `/api/admin/items/:id/reject` | Tolak laporan pending dengan alasan wajib dan catatan opsional | Admin |
-| `PATCH` | `/api/admin/items/:id/approve` | Terima laporan pending tanpa mengubah status fisik barang | Admin |
-| `PATCH` | `/api/admin/items/:id/restore` | Pulihkan laporan ditolak ke status pending | Admin |
-
-### 4. V2 Claims & Handover (QR Code) - **NEW**
-| Method | Endpoint | Deskripsi | Akses |
-| --- | --- | --- | --- |
-| `GET` | `/api/v2/claims/:claim_id/qr-token` | Buat/ambil QR Code Token dengan TTL maksimal 30 menit setelah jadwal dibuat | User |
-| `POST` | `/api/v2/claims/validate-qr` | Validasi Token QR untuk Serah Terima Barang (Handover) | Satpam/Admin |
-
-### Frontend business-flow endpoints
-
-| Method | Endpoint | Kegunaan | Akses |
-| --- | --- | --- | --- |
-| `GET` | `/api/home` | Ringkasan katalog dan barang terbaru | Public |
-| `GET` | `/api/profile` | Profil, laporan, dan riwayat klaim pengguna | User |
-| `GET` | `/api/slots?date=YYYY-MM-DD` | Slot dan kuota yang tersedia pada tanggal tertentu | Public |
-| `POST` | `/api/schedules` | Jadwalkan klaim yang sudah disetujui (`claimId`, `slotId`, `date`) | User |
-| `GET` | `/api/tickets/:claimId` | Ambil/generate tiket untuk klaim terjadwal | User pemilik |
-| `POST` | `/api/tickets/validate` | Validasi QR dan catat serah-terima | Admin/Satpam |
-| `POST` | `/api/intake` | Catat barang temuan oleh satpam; foto opsional | Admin/Satpam |
-| `PUT` | `/api/admin/items/batch-secure` | Pindahkan intake temuan terpilih ke lemari kaca | Admin/Satpam |
-| `GET` | `/api/admin/dashboard` | Statistik dashboard admin | Admin |
-| `GET` | `/api/admin/audit` | Log aktivitas dengan filter tanggal/aktor/aksi | Admin |
-
-Login frontend `POST /api/auth/login` menerima NIM atau NIP dan kata sandi. Respons menyediakan `{ user: { id, nim, name, role }, token }`; peran UI adalah `MAHASISWA` atau `ADMIN_BEM`, sementara token tetap menyimpan peran backend untuk middleware otorisasi. Laporan hilang maupun temuan muncul di katalog; hanya barang temuan berstatus `secured` yang dapat diklaim. Bukti klaim disimpan di luar direktori file publik dan hanya dapat diambil melalui endpoint admin yang terlindungi.
-
-### 5. V2 Notifications & Broadcast - **NEW**
-| Method | Endpoint | Deskripsi | Akses |
-| --- | --- | --- | --- |
-| `POST` | `/api/v2/notifications/broadcast` | Broadcast Email Asynchronous ke semua user | Satpam/Admin |
-
-### 6. Admin Dashboard (Satpam/Staff)
-| Method | Endpoint | Deskripsi | Akses |
-| --- | --- | --- | --- |
-| `GET` | `/api/admin/items` | Lihat semua barang (Data Lengkap) | Admin |
-| `PUT` | `/api/admin/items/:id/secure` | Verifikasi barang masuk pos (Bisa Blur/Unblur) | Admin |
-| `GET` | `/api/admin/claims` | Lihat daftar klaim masuk | Admin |
-| `PUT` | `/api/admin/claims/:id/process` | Setujui/Tolak klaim | Admin |
-| `GET` | `/api/admin/logs` | Lihat Log Aktivitas Sistem | Admin |
-
----
-
-## 📸 Fitur Gambar & Privasi (Blind Listing)
-
-Sistem ini menggunakan logika **Blind Listing** untuk melindungi privasi pemilik barang.
-
-1. **Auto-Blur:** Jika barang masuk kategori sensitif (misal: Dompet, HP, Dokumen), gambar akan **otomatis diblur** saat diupload oleh pelapor.
-2. **Unblur (Admin Only):** Satpam/Admin memiliki hak untuk mengubah status sensitif barang melalui sistem admin. Jika status diubah menjadi **Tidak Sensitif**, gambar asli akan ditampilkan ke publik.
-
----
-
-## 📝 Audit Trail (Log Aktivitas) & Email Logs
-
-Untuk keamanan dan akuntabilitas, aksi penting dicatat dalam **MongoDB**:
-* `activity_logs`: Mencatat riwayat login, laporan barang, klaim barang, proses persetujuan, verifikasi QR Handover, dan cron job harian.
-* `email_logs`: Mencatat status transaksi pengiriman email (Berhasil/Gagal) secara *asynchronous*.
-
----
-**TrustFound Team - 2024 (v2.0)**
+Untuk pertanyaan atau pelaporan masalah, hubungi tim UBLost&Found melalui `support@student.bakrie.ac.id`.

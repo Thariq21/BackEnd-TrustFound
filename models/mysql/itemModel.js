@@ -92,6 +92,8 @@ const Item = {
                 i.*, 
                 c.name as category_name, 
                 u.full_name as finder_name,
+                u.full_name as reporter_name,
+                u.nim as reporter_nim,
                 a.full_name as manage_admin_name
             FROM item i
             LEFT JOIN category c ON i.category_id = c.category_id
@@ -198,7 +200,7 @@ const Item = {
                 finder_nim, report_type, report_review_status, category_id, name, description,
                 found_location, is_sensitive, found_date, report_time, image_path, status, manage_nip
             )
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, 'pending', NULL)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL)
         `;
         
         const [result] = await db.execute(query, [

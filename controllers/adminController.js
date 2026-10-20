@@ -438,8 +438,23 @@ export const processClaim = async (req, res) => {
 export const batchSecureItems = async (req, res) => {
     try {
         const { item_ids } = req.body || {};
+        const pendingItems = await Item.findAllAdmin({
+            status: 'pending',
+            report_type: 'found',
+            report_review_status: 'accepted'
+        });
+        const selectedItems = Array.isArray(item_ids) && item_ids.length > 0
+            ? pendingItems.filter((item) => item_ids.map(String).includes(String(item.item_id)))
+            : pendingItems;
 
         const affectedRows = await Item.batchUpdateStatus(item_ids, 'secured', req.user.id);
+
+        if (affectedRows > 0) {
+            const allEmails = await User.findAllEmails();
+            selectedItems.forEach((item) => {
+                broadcastNewItemAsync(item.item_id, item.name, allEmails, item.image_path);
+            });
+        }
 
         // Log Activity
         logActivity(

@@ -41,8 +41,15 @@ const __dirname = path.dirname(__filename);
 
 // --- Middleware ---
 
-// Enable CORS (agar bisa diakses frontend React)
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:8080,http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: false,
+}));
 
 // Body Parser (untuk membaca JSON dan form data)
 app.use(express.json());
@@ -72,6 +79,10 @@ app.use("/api/v2/notifications", notificationRoutes);
 // --- Default Route (Health Check) ---
 app.get("/", (req, res) => {
   res.json({ message: "Welcome to UBLost&Found API is running..." });
+});
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
 });
 
 // --- OpenAPI Specification & Scalar API Reference ---

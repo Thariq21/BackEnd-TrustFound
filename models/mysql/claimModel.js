@@ -180,6 +180,20 @@ const Claim = {
         return rows.map(withEvidenceUrl);
     },
 
+    findScheduledBySlotId: async (slotId) => {
+        const [rows] = await db.execute(
+            `SELECT c.claim_id, u.email AS claimer_email, i.name AS item_name, i.image_path AS item_image_path,
+                    c.scheduled_date, ps.start_time, ps.end_time, ps.location
+             FROM claim c
+             JOIN general_user u ON c.claimer_nim = u.nim
+             JOIN item i ON c.item_id = i.item_id
+             JOIN pickup_slot ps ON c.scheduled_slot_id = ps.slot_id
+             WHERE c.scheduled_slot_id = ? AND c.status = 'scheduled'`,
+            [slotId]
+        );
+        return rows;
+    },
+
     // Menjadwalkan pengambilan barang (FR-04)
     scheduleSlot: async (claimId, slotId, scheduledDate) => {
         const connection = await db.getConnection();

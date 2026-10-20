@@ -6,9 +6,9 @@ dotenv.config({ path: './config/config.env' });
 
 // Create reusable transporter object using the default SMTP transport
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // true for 465, false for other ports
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: Number(process.env.SMTP_PORT || 587) === 465,
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
@@ -34,6 +34,15 @@ const logEmailEvent = async (status, eventType, details) => {
 // This function executes asynchronously and catches its own errors so the Express server doesn't crash
 const sendEmailAsync = async (mailOptions, eventType) => {
     if (process.env.DISABLE_EMAILS === 'true') return;
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        console.error(`[EmailService] Email skipped: SMTP_USER and SMTP_PASS are required for ${eventType}`);
+        await logEmailEvent('Failed', eventType, {
+            to: mailOptions.to || mailOptions.bcc,
+            subject: mailOptions.subject,
+            error_message: 'SMTP_USER and SMTP_PASS are not configured'
+        });
+        return;
+    }
 
     try {
         await transporter.sendMail(mailOptions);
@@ -72,9 +81,27 @@ export const sendClaimPendingEmailAsync = (userEmail, claimId, itemName, imagePa
         text: textMessage,
         html: baseEmailTemplate(`Claim Submitted: ${itemName}`, textMessage, fullImageUrl)
     };
-    
+
     // Fire and forget, no await
     sendEmailAsync(mailOptions, 'CLAIM_PENDING');
+};
+
+/**
+ * Notifies all configured admins when a user submits a claim.
+ */
+export const sendClaimSubmittedToAdminsAsync = (adminEmails, claimId, itemName, claimerName) => {
+    if (!adminEmails || adminEmails.length === 0) return;
+
+    const textMessage = `A new claim requires review.\n\nItem: ${itemName}\nClaim ID: ${claimId}\nSubmitted by: ${claimerName || 'User'}\n\nPlease review it in the TrustFound admin dashboard.`;
+    const mailOptions = {
+        from: `"TrustFound System" <${process.env.SMTP_USER}>`,
+        to: adminEmails,
+        subject: `New Claim Requires Review: ${itemName}`,
+        text: textMessage,
+        html: baseEmailTemplate(`New Claim Requires Review: ${itemName}`, textMessage)
+    };
+
+    sendEmailAsync(mailOptions, 'CLAIM_SUBMITTED_TO_ADMINS');
 };
 
 /**
@@ -162,10 +189,28 @@ export const sendClaimScheduledEmailAsync = (userEmail, claimId, itemName, sched
     sendEmailAsync(mailOptions, 'CLAIM_SCHEDULED');
 };
 
+export const sendClaimScheduleUpdatedEmailAsync = (userEmail, claimId, itemName, scheduledDate, slotTime, location, imagePath = null) => {
+    const textMessage = `Your pickup appointment for "${itemName}" has been updated by an administrator.\n\nDate: ${scheduledDate}\nTime: ${slotTime}\nLocation: ${location}\n\nPlease check your TrustFound QR E-Ticket before arriving.`;
+    const filename = imagePath ? imagePath.split(/[\/\\]/).pop() : null;
+    const fullImageUrl = filename ? `${process.env.SERVER_BASE_URL || 'http://localhost:5000'}/uploads/${filename}` : null;
+
+    const mailOptions = {
+        from: `"TrustFound System" <${process.env.SMTP_USER}>`,
+        to: userEmail,
+        subject: `Pickup Schedule Updated: ${itemName}`,
+        text: textMessage,
+        html: baseEmailTemplate(`Pickup Schedule Updated: ${itemName}`, textMessage, fullImageUrl)
+    };
+
+    sendEmailAsync(mailOptions, 'CLAIM_SCHEDULE_UPDATED');
+};
+
 export default {
     sendClaimPendingEmailAsync,
+    sendClaimSubmittedToAdminsAsync,
     sendClaimDecisionEmailAsync,
     broadcastNewItemAsync,
     sendHandoverReceiptEmailAsync,
-    sendClaimScheduledEmailAsync
+    sendClaimScheduledEmailAsync,
+    sendClaimScheduleUpdatedEmailAsync
 };

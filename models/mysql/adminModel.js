@@ -30,6 +30,11 @@ const Admin = {
     findAll: async () => {
         const [rows] = await db.execute('SELECT nip, full_name, email, role FROM admin');
         return rows;
+    },
+
+    findAllEmails: async () => {
+        const [rows] = await db.execute('SELECT email FROM admin WHERE email IS NOT NULL');
+        return rows.map((row) => row.email);
     }
 };
 

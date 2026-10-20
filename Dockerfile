@@ -1,5 +1,5 @@
 # Menggunakan image Node.js versi 20 (Debian-based)
-FROM node:20
+FROM node:20-bookworm-slim
 
 # Set direktori kerja di dalam container
 WORKDIR /app
@@ -9,7 +9,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Instal dependensi proyek
-RUN npm install --production
+RUN npm ci --omit=dev
 
 # Menyalin seluruh kode sumber proyek ke dalam container
 COPY . .
@@ -20,5 +20,4 @@ RUN mkdir -p public/uploads
 # Expose port yang digunakan aplikasi (default 5000)
 EXPOSE 5000
 
-# Menjalankan aplikasi menggunakan perintah node
 CMD ["node", "app.js"]

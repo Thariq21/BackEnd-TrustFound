@@ -1,4 +1,6 @@
 import Slot from '../models/mysql/slotModel.js';
+import Claim from '../models/mysql/claimModel.js';
+import { sendClaimScheduleUpdatedEmailAsync } from '../services/emailService.js';
 
 const getSlotDate = (value) => {
     if (!value) return null;
@@ -158,7 +160,20 @@ export const updateSlot = async (req, res) => {
             max_quota: Number(next.max_quota),
             is_active: active
         });
-        return res.json({ status: 'success', data: await Slot.findById(req.params.id) });
+        const updatedSlot = await Slot.findById(req.params.id);
+        const scheduledClaims = await Claim.findScheduledBySlotId(req.params.id);
+        scheduledClaims.forEach((claim) => {
+            sendClaimScheduleUpdatedEmailAsync(
+                claim.claimer_email,
+                claim.claim_id,
+                claim.item_name,
+                claim.scheduled_date,
+                `${updatedSlot.start_time.slice(0, 5)} - ${updatedSlot.end_time.slice(0, 5)}`,
+                updatedSlot.location,
+                claim.item_image_path
+            );
+        });
+        return res.json({ status: 'success', data: updatedSlot });
     } catch (error) {
         console.error('Could not update pickup slot:', error);
         return res.status(500).json({ status: 'error', message: 'Could not update pickup slot' });

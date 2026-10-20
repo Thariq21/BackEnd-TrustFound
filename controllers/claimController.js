@@ -3,7 +3,12 @@ import Item from '../models/mysql/itemModel.js';
 import User from '../models/mysql/userModel.js';
 import Slot from '../models/mysql/slotModel.js';
 import { logActivity } from '../utils/logger.js';
-import { sendClaimPendingEmailAsync, sendClaimScheduledEmailAsync } from '../services/emailService.js';
+import {
+    sendClaimPendingEmailAsync,
+    sendClaimScheduledEmailAsync,
+    sendClaimSubmittedToAdminsAsync
+} from '../services/emailService.js';
+import Admin from '../models/mysql/adminModel.js';
 import fs from 'fs';
 
 const removeEvidence = (file) => {
@@ -126,6 +131,8 @@ export const createClaim = async (req, res) => {
             if (user && user.email) {
             sendClaimPendingEmailAsync(user.email, result.claim_id, item.name, item.image_path);
             }
+            const admins = await Admin.findAllEmails();
+            sendClaimSubmittedToAdminsAsync(admins, result.claim_id, item.name, user?.full_name);
         } catch (e) {
             console.error('Failed to trigger email', e);
         }
