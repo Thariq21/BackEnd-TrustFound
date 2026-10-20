@@ -5,7 +5,7 @@ import { protect, adminOnly } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 // POST /api/v2/notifications/broadcast
-// Requires Admin/Satpam
+// Requires Admin_BEM
 router.post('/broadcast', protect, adminOnly, broadcastNewItem);
 
 export default router;

@@ -33,7 +33,7 @@ CREATE TABLE `admin` (
   `full_name` varchar(255) NOT NULL,
   `password` varchar(255) NOT NULL,
   `email` varchar(255) NOT NULL,
-  `role` enum('super_admin','admin','satpam') NOT NULL
+  `role` enum('Admin_BEM') NOT NULL DEFAULT 'Admin_BEM'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -41,8 +41,8 @@ CREATE TABLE `admin` (
 --
 
 INSERT INTO `admin` (`nip`, `univ_id`, `full_name`, `password`, `email`, `role`) VALUES
-(2314, 1231, 'Budi Santoso', '$2a$12$F6X2u4bgYvY/6wlyV11LMuj3R6hcHD0aFqevy0V/UOmh4tZpM7HcW', 'budi@bakrie.ac.id', 'satpam'),
-(1231001056, 1231, 'Rahul Nafta', '$2a$12$FaXTUpkK3HBbNu6YgWUgSulXQ7R01piMzNMRO2hrjfSgTzFGfzQsm', 'awan@bakrie.ac.id', 'admin');
+(2314, 1231, 'Budi Santoso', '$2a$12$F6X2u4bgYvY/6wlyV11LMuj3R6hcHD0aFqevy0V/UOmh4tZpM7HcW', 'budi@bakrie.ac.id', 'Admin_BEM'),
+(1231001056, 1231, 'Rahul Nafta', '$2a$12$FaXTUpkK3HBbNu6YgWUgSulXQ7R01piMzNMRO2hrjfSgTzFGfzQsm', 'awan@bakrie.ac.id', 'Admin_BEM');
 
 -- --------------------------------------------------------
 

@@ -22,11 +22,11 @@ const Admin = {
             INSERT INTO admin (nip, univ_id, full_name, password, email, role)
             VALUES (?, ?, ?, ?, ?, ?)
         `;
-        const [result] = await db.execute(query, [nip, univ_id, full_name, password, email, role]);
+        const [result] = await db.execute(query, [nip, univ_id, full_name, password, email, role || 'Admin_BEM']);
         return result;
     },
 
-    // Mengambil semua admin (opsional, untuk superadmin)
+    // Mengambil semua admin
     findAll: async () => {
         const [rows] = await db.execute('SELECT nip, full_name, email, role FROM admin');
         return rows;

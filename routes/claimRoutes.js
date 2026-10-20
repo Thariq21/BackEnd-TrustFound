@@ -10,7 +10,7 @@ const router = express.Router();
 router.use(protect);
 
 router.get('/', (req, res, next) => {
-    if (['admin', 'super_admin', 'satpam', 'ADMIN_BEM'].includes(req.user.role)) {
+    if (['Admin_BEM', 'ADMIN_BEM'].includes(req.user.role)) {
         return getClaimsAdmin(req, res, next);
     }
     return getMyClaims(req, res, next);

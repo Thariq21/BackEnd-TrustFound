@@ -10,7 +10,7 @@ const Report = {
                 c.name as category,
                 i.found_location,
                 i.status,
-                COALESCE(u.full_name, 'Admin/Satpam') as reporter_name,
+                COALESCE(u.full_name, 'Admin BEM') as reporter_name,
                 COALESCE(u.nim, '-') as reporter_nim
             FROM item i
             LEFT JOIN category c ON i.category_id = c.category_id

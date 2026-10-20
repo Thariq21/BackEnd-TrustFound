@@ -3,7 +3,7 @@
   "info": {
     "title": "UBLost&Found API Documentation",
     "version": "1.0.0",
-    "description": "# Universitas Bakrie Lost and Found System \n\nOfficial REST API documentation for the **UBLost&Found** system. UBLost&Found connects students and university security (Satpam/Admin) to facilitate reporting, securing, claiming, and returning lost and found items.\n\n### Key Concepts & Workflows\n- **Authentication & Roles:**\n  - **Student (`role: user`):** Can report lost or found items, submit claims for secured found items, view personal history, and generate temporary QR tokens for scheduled claims.\n  - **Satpam / Admin (`role: satpam`, `admin`, `super_admin`):** Can directly log secured items, review student reports, approve/reject claims, scan QR tokens during handover, review MongoDB audit logs, and generate PDF reports.\n- **Report moderation and physical lifecycle are separate:** Student reports start with `report_review_status: pending` and are hidden from the public catalog until accepted. Admin approval changes only the review status; it does not secure the physical item. Found reports must separately transition through physical `status: pending` to `secured` before they can be claimed. Rejected reports have `report_review_status: rejected` and are excluded from public endpoints; `rejected` is not an item lifecycle status.\n- **Catalog & Item Privacy:** Accepted lost and found reports share the catalog; claims are limited to accepted, secured found items. Items categorized as sensitive (e.g. *Elektronik*, *Dompet/Identitas*) are automatically blurred using Sharp during upload. Admins can toggle sensitivity during securing.\n- **QR Handover Protocol:** Scheduled claims generate a temporary QR token valid for up to 30 minutes. The physical item handover is confirmed atomically when Satpam scans the QR token at the security desk.\n- **Auto-Donation:** Items remaining unclaimed for over 90 days are transitioned to `donated` status via background scheduled jobs.",
+    "description": "# Universitas Bakrie Lost and Found System \n\nOfficial REST API documentation for the **UBLost&Found** system. UBLost&Found connects students and university staff (Admin BEM) to facilitate reporting, securing, claiming, and returning lost and found items.\n\n### Key Concepts & Workflows\n- **Authentication & Roles:**\n  - **Student (`role: user`):** Can report lost or found items, submit claims for secured found items, view personal history, and generate temporary QR tokens for scheduled claims.\n  - **Admin BEM (`role: Admin_BEM`):** Can directly log secured items, review student reports, approve/reject claims, scan QR tokens during handover, review MongoDB audit logs, and generate PDF reports.\n- **Report moderation and physical lifecycle are separate:** Student reports start with `report_review_status: pending` and are hidden from the public catalog until accepted. Admin approval changes only the review status; it does not secure the physical item. Found reports must separately transition through physical `status: pending` to `secured` before they can be claimed. Rejected reports have `report_review_status: rejected` and are excluded from public endpoints; `rejected` is not an item lifecycle status.\n- **Catalog & Item Privacy:** Accepted lost and found reports share the catalog; claims are limited to accepted, secured found items. Items categorized as sensitive (e.g. *Elektronik*, *Dompet/Identitas*) are automatically blurred using Sharp during upload. Admins can toggle sensitivity during securing.\n- **QR Handover Protocol:** Scheduled claims generate a temporary QR token valid for up to 30 minutes. The physical item handover is confirmed atomically when Admin BEM scans the QR token at the security desk.\n- **Auto-Donation:** Items remaining unclaimed for over 90 days are transitioned to `donated` status via background scheduled jobs.",
     "contact": {
       "name": "BEM & UBLost&Found Team",
       "email": "support@student.bakrie.ac.id"
@@ -26,7 +26,7 @@
   "tags": [
     {
       "name": "Auth",
-      "description": "Student registration and authentication (User & Admin/Satpam)"
+      "description": "Student registration and authentication (User & Admin BEM)"
     },
     {
       "name": "Items",
@@ -75,7 +75,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "Enter your JWT token obtained from `/api/auth/login` (Student) or `/api/auth/admin/login` (Satpam/Admin). Format: `Bearer <token>`"
+        "description": "Enter your JWT token obtained from `/api/auth/login` (Student) or `/api/auth/admin/login` (Admin BEM). Format: `Bearer <token>`"
       }
     },
     "schemas": {
@@ -295,7 +295,7 @@
                 "type": "string",
                 "enum": [
                   "MAHASISWA",
-                  "ADMIN_BEM"
+                  "Admin_BEM"
                 ],
                 "example": "MAHASISWA"
               }
@@ -338,9 +338,7 @@
                 "type": "string",
                 "enum": [
                   "user",
-                  "satpam",
-                  "admin",
-                  "super_admin"
+                  "Admin_BEM"
                 ],
                 "example": "user"
               },
@@ -361,7 +359,7 @@
         "properties": {
           "nip": {
             "type": "string",
-            "description": "Nomor Induk Pegawai (Admin / Satpam ID)",
+            "description": "Nomor Induk Pegawai (Admin BEM ID)",
             "example": "2314"
           },
           "password": {
@@ -407,11 +405,9 @@
               "role": {
                 "type": "string",
                 "enum": [
-                  "satpam",
-                  "admin",
-                  "super_admin"
+                  "Admin_BEM"
                 ],
-                "example": "satpam"
+                "example": "Admin_BEM"
               },
               "token": {
                 "type": "string",
@@ -1210,7 +1206,7 @@
               },
               "role": {
                 "type": "string",
-                "example": "satpam"
+                "example": "Admin_BEM"
               },
               "name": {
                 "type": "string",
@@ -1474,7 +1470,7 @@
           "Auth"
         ],
         "summary": "Student or admin login",
-        "description": "Authenticates a student by NIM or an admin by NIP and password. Returns a frontend-compatible user object and signed JWT valid for 1 hour. The JWT retains backend roles (`user`, `satpam`, `admin`, or `super_admin`); the user object exposes `MAHASISWA` or `ADMIN_BEM`.",
+        "description": "Authenticates a student by NIM or an admin by NIP and password. Returns a frontend-compatible user object and signed JWT valid for 1 hour. The JWT retains backend roles (`user`, `Admin_BEM`); the user object exposes `MAHASISWA` or `Admin_BEM`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1528,8 +1524,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Admin / Satpam login",
-        "description": "Authenticates an administrative user (Satpam, Staff, Super Admin) using NIP and password. Returns a signed JWT token containing administrative roles (`satpam`, `admin`, `super_admin`).",
+        "summary": "Admin login",
+        "description": "Authenticates an administrative user (Admin BEM) using NIP and password. Returns a signed JWT token containing administrative role (`Admin_BEM`).",
         "requestBody": {
           "required": true,
           "content": {
@@ -2146,7 +2142,7 @@
             }
           },
           "403": {
-            "description": "Forbidden - Requires Satpam or Admin role",
+            "description": "Forbidden - Requires Admin BEM role",
             "content": {
               "application/json": {
                 "schema": {
@@ -2349,7 +2345,7 @@
             }
           },
           "403": {
-            "description": "Forbidden - Requires Satpam or Admin",
+            "description": "Forbidden - Requires Admin BEM role",
             "content": {
               "application/json": {
                 "schema": {
@@ -2577,11 +2573,10 @@
               "type": "string",
               "enum": [
                 "user",
-                "admin",
-                "satpam"
+                "Admin_BEM"
               ]
             },
-            "example": "admin"
+            "example": "Admin_BEM"
           },
           {
             "name": "action",
@@ -2880,7 +2875,7 @@
         "tags": [
           "Claims V2 (QR Handover)"
         ],
-        "summary": "Validate QR code & complete item handover (Satpam)",
+        "summary": "Validate QR code & complete item handover (Admin BEM)",
         "description": "Scans and validates a student's QR code at the security post. In a single atomic database transaction, the item is marked as `claimed`, the claim status is updated to `claimed`, the QR token is invalidated, and an official handover receipt email is dispatched to the student.",
         "security": [
           {
@@ -2949,7 +2944,7 @@
             }
           },
           "403": {
-            "description": "Forbidden - Satpam / Admin role required",
+            "description": "Forbidden - Admin BEM role required",
             "content": {
               "application/json": {
                 "schema": {
@@ -3047,7 +3042,7 @@
             }
           },
           "403": {
-            "description": "Forbidden - Requires Satpam or Admin",
+            "description": "Forbidden - Requires Admin BEM role",
             "content": {
               "application/json": {
                 "schema": {
@@ -3800,7 +3795,7 @@
             "description": "Handover completed"
           },
           "403": {
-            "description": "Admin/Satpam role required"
+            "description": "Admin BEM role required"
           },
           "409": {
             "description": "Ticket expired, already used, or item unavailable"
@@ -3863,7 +3858,7 @@
             "description": "Intake saved as a pending found item"
           },
           "403": {
-            "description": "Admin/Satpam role required"
+            "description": "Admin BEM role required"
           }
         }
       }

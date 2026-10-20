@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 
 // @desc    Get all items for Admin Dashboard (Filterable)
 // @route   GET /api/admin/items
-// @access  Private (Admin/Satpam)
+// @access  Private (Admin BEM)
 export const getAllItemsAdmin = async (req, res) => {
     // Ambil query params untuk filter
     const { status, startDate, endDate } = req.query;
@@ -132,7 +132,7 @@ export const secureItem = async (req, res) => {
 
         // --- LOG ACTIVITY ---
         logActivity(
-            { id: req.user.id, role: 'admin', name: 'Satpam/Admin' },
+            { id: req.user.id, role: req.user.role || 'Admin_BEM', name: 'Admin BEM' },
             'SECURE_ITEM',
             { entity: 'Item', entityId: itemId, details: 'Item marked as secured' },
             req,
@@ -171,7 +171,7 @@ export const approveItemReport = async (req, res) => {
         }
 
         logActivity(
-            { id: req.user.id, role: req.user.role, name: 'Admin' },
+            { id: req.user.id, role: req.user.role || 'Admin_BEM', name: 'Admin BEM' },
             'APPROVE_ITEM_REPORT',
             {
                 entity: 'Item',
@@ -213,7 +213,7 @@ export const rejectItemReport = async (req, res) => {
         }
 
         logActivity(
-            { id: req.user.id, role: req.user.role, name: 'Admin' },
+            { id: req.user.id, role: req.user.role || 'Admin_BEM', name: 'Admin BEM' },
             'REJECT_ITEM_REPORT',
             {
                 entity: 'Item',
@@ -247,7 +247,7 @@ export const restoreRejectedItemReport = async (req, res) => {
         }
 
         logActivity(
-            { id: req.user.id, role: req.user.role, name: 'Admin' },
+            { id: req.user.id, role: req.user.role || 'Admin_BEM', name: 'Admin BEM' },
             'RESTORE_ITEM_REPORT',
             {
                 entity: 'Item',
@@ -315,7 +315,7 @@ export const createItemAdmin = async (req, res) => {
 
         // --- LOG ACTIVITY ---
         logActivity(
-            { id: req.user.id, role: req.user.role, name: 'Admin' },
+            { id: req.user.id, role: req.user.role || 'Admin_BEM', name: 'Admin BEM' },
             'CREATE_ITEM_SECURED',
             { entity: 'Item', entityId: result.insertId, details: `Admin uploaded: ${name}` },
             req
@@ -407,7 +407,7 @@ export const processClaim = async (req, res) => {
 
          // --- LOG ACTIVITY ---
         logActivity(
-            { id: req.user.id, role: 'admin', name: 'Satpam/Admin' },
+            { id: req.user.id, role: req.user.role || 'Admin_BEM', name: 'Admin BEM' },
             status === 'verified' ? 'APPROVE_CLAIM' : 'REJECT_CLAIM',
             { entity: 'Claim', entityId: claimId, details: `Claim ${status}` },
             req
@@ -458,7 +458,7 @@ export const batchSecureItems = async (req, res) => {
 
         // Log Activity
         logActivity(
-            { id: req.user.id, role: 'admin', name: 'Admin BEM' },
+            { id: req.user.id, role: req.user.role || 'Admin_BEM', name: 'Admin BEM' },
             'BATCH_SECURE_ITEMS',
             {
                 entity: 'Item',

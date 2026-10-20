@@ -9,7 +9,7 @@ const router = express.Router();
 router.get('/:claim_id/qr-token', protect, getQRToken);
 
 // POST /api/v2/claims/validate-qr
-// Requires JWT (Satpam role) - Assuming 'satpam' or 'admin' role
+// Requires JWT (Admin_BEM role)
 router.post('/validate-qr', protect, adminOnly, validateQR);
 
 export default router;

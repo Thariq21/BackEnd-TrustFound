@@ -73,7 +73,7 @@ export const getQRToken = async (req, res) => {
 
 // @desc    Validate QR Token and Handover Item
 // @route   POST /api/v2/claims/validate-qr
-// @access  Private (Satpam)
+// @access  Private (Admin BEM)
 export const validateQR = async (req, res) => {
     try {
         const qr_token = req.body.qr_token || req.body.qrValue;
@@ -108,7 +108,7 @@ export const validateQR = async (req, res) => {
         }
 
         logActivity(
-            { id: req.user.id, role: req.user.role, name: 'Admin/Satpam' },
+            { id: req.user.id, role: req.user.role || 'Admin_BEM', name: 'Admin BEM' },
             'ITEM_HANDOVER_SUCCESS',
             { entity: 'Claim', entityId: claim.claim_id, details: `Item ${claim.item_id} handed over` },
             req

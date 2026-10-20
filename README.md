@@ -168,9 +168,9 @@ Di Scalar, pilih endpoint, klik **Authorize**, masukkan token JWT, lalu jalankan
 ### Peran pengguna
 
 - **Mahasiswa:** mendaftar, login, melihat katalog, mengirim laporan, mengajukan klaim, dan menjadwalkan pengambilan.
-- **Satpam/Admin:** login, meninjau laporan, mengamankan barang, memproses klaim, mengelola slot, memvalidasi QR, melihat dashboard/audit, dan mengirim broadcast.
+- **Admin BEM:** login, meninjau laporan, mengamankan barang, memproses klaim, mengelola slot, memvalidasi QR, melihat dashboard/audit, dan mengirim broadcast.
 
-Token admin dapat memiliki role backend `admin`, `super_admin`, `satpam`, atau `ADMIN_BEM`. Semua role tersebut diterima oleh middleware admin.
+Token admin memiliki role backend `Admin_BEM`. Role ini diterima oleh middleware admin.
 
 ### Status laporan dan status fisik
 
@@ -275,9 +275,9 @@ Alternatif endpoint legacy `POST /api/claims` menerima `item_id` di form body. R
 4. Mahasiswa memilih slot dari `GET /api/slots?date=YYYY-MM-DD`.
 5. Mahasiswa membuat jadwal melalui `POST /api/schedules` atau `POST /api/claims/:id/schedule`.
 6. Mahasiswa mengambil QR melalui `GET /api/tickets/:claimId` atau `GET /api/v2/claims/:claimId/qr-token`.
-7. Satpam memvalidasi QR melalui `POST /api/tickets/validate` atau `POST /api/v2/claims/validate-qr`.
+7. Admin BEM memvalidasi QR melalui `POST /api/tickets/validate` atau `POST /api/v2/claims/validate-qr`.
 
-Token QR berlaku maksimal 30 menit dan hanya dapat digunakan oleh admin/satpam untuk handover.
+Token QR berlaku maksimal 30 menit dan hanya dapat digunakan oleh Admin BEM untuk handover.
 
 ## Daftar endpoint
 
@@ -291,7 +291,7 @@ Semua endpoint di bawah ini menggunakan prefix `/api`.
 | GET | `/health` | Health check |
 | POST | `/auth/register` | Registrasi mahasiswa |
 | POST | `/auth/login` | Login mahasiswa atau admin |
-| POST | `/auth/admin/login` | Login admin/satpam |
+| POST | `/auth/admin/login` | Login admin (Admin BEM) |
 | GET | `/items` | Katalog publik |
 | GET | `/items/:id` | Detail item |
 | GET | `/categories` | Daftar kategori |
@@ -315,7 +315,7 @@ Semua endpoint di bawah ini menggunakan prefix `/api`.
 | GET | `/tickets/:claimId` | Ambil/generate tiket QR |
 | GET | `/v2/claims/:claimId/qr-token` | Ambil/generate token QR V2 |
 
-### Admin/satpam
+### Admin BEM
 
 | Method | Endpoint | Keterangan |
 | --- | --- | --- |

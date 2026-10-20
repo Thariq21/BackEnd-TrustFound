@@ -104,26 +104,27 @@ export const loginUser = async (req, res) => {
 
         const admin = await Admin.findByNip(nim);
         if (admin && (await bcrypt.compare(password, admin.password))) {
+            const adminRole = 'Admin_BEM';
             logActivity(
-                { id: admin.nip, role: admin.role, name: admin.full_name },
+                { id: admin.nip, role: adminRole, name: admin.full_name },
                 'LOGIN',
                 { entity: 'Admin', entityId: admin.nip, details: 'Admin logged in' },
                 req
             );
 
-            const token = generateToken(admin.nip, admin.role);
+            const token = generateToken(admin.nip, adminRole);
             const session = {
                 id: String(admin.nip),
                 nim: String(admin.nip),
                 name: admin.full_name,
                 email: admin.email,
-                role: 'ADMIN_BEM'
+                role: 'Admin_BEM'
             };
             return res.json({
                 ...sessionResponse(session, token, {
                     nip: admin.nip,
                     name: admin.full_name,
-                    role: admin.role
+                    role: adminRole
                 }),
                 message: 'Login successful'
             });
@@ -136,7 +137,7 @@ export const loginUser = async (req, res) => {
     }
 };
 
-// @desc    Login admin (Satpam/Staff)
+// @desc    Login admin (Admin BEM)
 // @route   POST /api/auth/admin/login
 // @access  Public
 export const loginAdmin = async (req, res) => {
@@ -146,29 +147,29 @@ export const loginAdmin = async (req, res) => {
         const admin = await Admin.findByNip(nip);
 
         if (admin && (await bcrypt.compare(password, admin.password))) {
-            
+            const adminRole = 'Admin_BEM';
             // --- LOG ACTIVITY ---
             logActivity(
-                { id: admin.nip, role: admin.role, name: admin.full_name },
+                { id: admin.nip, role: adminRole, name: admin.full_name },
                 'LOGIN',
                 { entity: 'Admin', entityId: admin.nip, details: 'Admin logged in' },
                 req
             );
             // --------------------
 
-            const token = generateToken(admin.nip, admin.role);
+            const token = generateToken(admin.nip, adminRole);
             const session = {
                 id: String(admin.nip),
                 nim: String(admin.nip),
                 name: admin.full_name,
                 email: admin.email,
-                role: 'ADMIN_BEM'
+                role: 'Admin_BEM'
             };
             res.json({
                 ...sessionResponse(session, token, {
                     nip: admin.nip,
                     name: admin.full_name,
-                    role: admin.role
+                    role: adminRole
                 }),
                 message: 'Admin login successful'
             });

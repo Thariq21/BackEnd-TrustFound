@@ -8,7 +8,7 @@ const router = express.Router();
 router.post('/register', registerValidation, validate, registerUser);
 router.post('/login', loginUser);
 
-// Rute untuk Admin/Satpam
+// Rute untuk Admin (Admin BEM)
 router.post('/admin/login', loginAdmin);
 
 export default router;

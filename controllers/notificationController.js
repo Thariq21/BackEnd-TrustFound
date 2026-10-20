@@ -3,7 +3,7 @@ import { broadcastNewItemAsync } from '../services/emailService.js';
 
 // @desc    Broadcast a new found item to all users
 // @route   POST /api/v2/notifications/broadcast
-// @access  Private (Admin/Satpam)
+// @access  Private (Admin BEM)
 export const broadcastNewItem = async (req, res) => {
     try {
         const { itemDetails } = req.body;

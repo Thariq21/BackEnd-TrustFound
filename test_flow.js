@@ -27,10 +27,10 @@ async function runTest() {
     
     await getQRToken(reqMhs, resMhs);
 
-    // 3. Simulate POST /api/v2/claims/validate-qr (Satpam)
+    // 3. Simulate POST /api/v2/claims/validate-qr (Admin BEM)
     const reqSatpam = {
         body: { qr_token: generatedToken },
-        user: { id: '2314' } // NIP of a satpam/admin
+        user: { id: '2314', role: 'Admin_BEM' } // NIP of an Admin BEM
     };
     const resSatpam = {
         status: function(code) { this.statusCode = code; return this; },
