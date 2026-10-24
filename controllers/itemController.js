@@ -49,24 +49,35 @@ const storeItemReport = async (
         name,
         description = '',
         found_location,
+        lost_location,
         location,
         found_date,
+        lost_date,
         date,
         report_time,
+        found_time,
+        lost_time,
         time
     } = body;
 
     if (!file && !intake) {
         return res.status(400).json({ status: 'error', message: 'A JPG or PNG photo is required' });
     }
-    const reportDate = found_date || date || new Date().toISOString().slice(0, 10);
-    const reportTime = report_time || time || null;
+    const reportLocation = reportType === 'lost'
+        ? lost_location || location
+        : found_location || location;
+    const reportDate = reportType === 'lost'
+        ? lost_date || date || new Date().toISOString().slice(0, 10)
+        : found_date || date || new Date().toISOString().slice(0, 10);
+    const reportTime = reportType === 'lost'
+        ? lost_time || report_time || time || null
+        : found_time || report_time || time || null;
     const timePattern = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
     if (
         typeof name !== 'string' ||
         !name.trim() ||
-        typeof (found_location || location) !== 'string' ||
-        !(found_location || location).trim() ||
+        typeof reportLocation !== 'string' ||
+        !reportLocation.trim() ||
         !isValidDate(reportDate) ||
         (requireTime && !timePattern.test(reportTime || '')) ||
         (reportTime && !timePattern.test(reportTime))
@@ -106,16 +117,17 @@ const storeItemReport = async (
             category_id: category.category_id,
             name: name.trim(),
             description: String(description).trim(),
-            found_location: (found_location || location).trim(),
+            location: reportLocation.trim(),
             is_sensitive: sensitive ? 1 : 0,
-            found_date: reportDate,
+            report_date: reportDate,
             report_time: reportTime,
             image_path: imagePath
         };
         report.report_review_status = intake ? 'accepted' : 'pending';
 
+        const initialStatus = normalizedType === 'lost' ? 'active' : 'available';
         const result = intake
-            ? await Item.createByAdmin({ ...report, status: 'pending' })
+            ? await Item.createByAdmin({ ...report, status: initialStatus })
             : await Item.create(report);
         const itemId = result.insertId;
 
@@ -137,7 +149,14 @@ const storeItemReport = async (
         return res.status(201).json({
             status: 'success',
             message: intake ? 'Intake recorded successfully' : 'Item report submitted successfully',
-            data: { item_id: itemId, ...report, status: 'pending' }
+            data: {
+                item_id: itemId,
+                ...report,
+                [normalizedType === 'lost' ? 'lost_location' : 'found_location']: report.location,
+                [normalizedType === 'lost' ? 'lost_date' : 'found_date']: report.report_date,
+                [normalizedType === 'lost' ? 'lost_time' : 'found_time']: report.report_time,
+                status: initialStatus
+            }
         });
     } catch (error) {
         if (file) {
@@ -153,8 +172,9 @@ export const getItems = async (req, res) => {
     const status = String(req.query.status || 'catalog').toLowerCase();
     const { category_id, startDate, endDate } = req.query;
     const statusAliases = {
-        waiting_at_security: 'pending',
-        available: 'secured'
+        waiting_at_security: 'active',
+        pending: 'active',
+        secured: 'available'
     };
     const requestedStatus = statusAliases[status] || status;
     const category = String(req.query.category || '').toLowerCase();

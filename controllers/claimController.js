@@ -38,31 +38,31 @@ export const createClaim = async (req, res) => {
                 return res.status(400).json({ status: 'error', message: 'answers must be a JSON array' });
             }
         }
-        if (!Array.isArray(answers) &&
-            (body['answers[0]'] !== undefined ||
-             body['answers[1]'] !== undefined ||
-             body['answers.0'] !== undefined ||
-             body['answers.1'] !== undefined)) {
-            answers = [
-                body['answers[0]'] || body['answers.0'],
-                body['answers[1]'] || body['answers.1']
-            ];
+        if (!Array.isArray(answers)) {
+            const indexedAnswers = Object.keys(body)
+                .map((key) => {
+                    const match = key.match(/^answers(?:\[(\d+)\]|\.(\d+))$/);
+                    return match ? [Number(match[1] ?? match[2]), body[key]] : null;
+                })
+                .filter(Boolean)
+                .sort(([left], [right]) => left - right);
+            if (indexedAnswers.length) {
+                answers = indexedAnswers.map(([, answer]) => answer);
+            }
         }
-        if (Array.isArray(answers) &&
-            (answers.length !== 2 || answers.some((answer) => typeof answer !== 'string' || !answer.trim()))) {
+        if (
+            !Array.isArray(answers) ||
+            answers.length < 1 ||
+            answers.length > 10 ||
+            answers.some((answer) => typeof answer !== 'string' || !answer.trim())
+        ) {
             removeEvidence(evidence);
-            return res.status(400).json({ status: 'error', message: 'Both ownership verification answers are required' });
+            return res.status(400).json({
+                status: 'error',
+                message: 'Provide a non-empty answer for each verification question'
+            });
         }
-        if (req.params.itemId && !Array.isArray(answers)) {
-            removeEvidence(evidence);
-            return res.status(400).json({ status: 'error', message: 'Both ownership verification answers are required' });
-        }
-        const legacyAnswer = String(
-            body.challange_answer || body.challengeAnswer || body.answer || ''
-        ).trim();
-        const answerText = Array.isArray(answers)
-            ? JSON.stringify({ answers: answers.map((answer) => answer.trim()) })
-            : legacyAnswer;
+        const answerText = JSON.stringify({ answers: answers.map((answer) => answer.trim()) });
 
         if (!itemId) {
             removeEvidence(evidence);
@@ -75,28 +75,51 @@ export const createClaim = async (req, res) => {
             return res.status(404).json({ status: 'error', message: 'Item not found' });
         }
 
-        if (item.report_type !== 'found' || item.status !== 'secured') {
+        if (item.report_type !== 'found' || item.status !== 'available') {
             removeEvidence(evidence);
             return res.status(409).json({
                 status: 'error',
-                message: 'Only found items available in the cabinet can be claimed'
+                message: 'Only available found items can be claimed'
             });
         }
 
-        if (Boolean(Number(item.is_sensitive)) && !answerText) {
+        const questions = item.claim_questions || [];
+        if (!questions.length) {
+            removeEvidence(evidence);
+            return res.status(409).json({
+                status: 'error',
+                message: 'Ownership verification questions have not been configured for this item'
+            });
+        }
+        if (answers.length !== questions.length) {
             removeEvidence(evidence);
             return res.status(400).json({
-                    status: 'error', 
-                    message: 'This is a sensitive item. You must provide a challenge answer (e.g., detail ciri-ciri).' 
+                status: 'error',
+                message: `Provide exactly ${questions.length} verification answers`
             });
         }
 
         const result = await Claim.createActive({
             claimer_nim: req.user.id,
             item_id: itemId,
-            challange_answer: answerText || '-',
+            challange_answer: answerText,
+            answers,
             evidence_path: evidence?.path || null
         });
+        if (result.error === 'questions_not_configured') {
+            removeEvidence(evidence);
+            return res.status(409).json({
+                status: 'error',
+                message: 'Ownership verification questions have not been configured for this item'
+            });
+        }
+        if (result.error === 'invalid_answers') {
+            removeEvidence(evidence);
+            return res.status(400).json({
+                status: 'error',
+                message: 'Provide a non-empty answer for each verification question'
+            });
+        }
         if (result.error === 'item_unavailable') {
             removeEvidence(evidence);
             return res.status(409).json({

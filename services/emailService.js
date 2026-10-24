@@ -136,7 +136,7 @@ export const sendClaimDecisionEmailAsync = (userEmail, claimId, itemName, decisi
 export const broadcastNewItemAsync = (itemId, itemName, allUserEmailsArray, imagePath = null) => {
     if (!allUserEmailsArray || allUserEmailsArray.length === 0) return;
 
-    const textMessage = `A new item has been found and secured at the security post.\n\nDetails:\nName: ${itemName}\n\nIf this is yours, please claim it via the TrustFound system.`;
+    const textMessage = `A found item is now available for claims.\n\nDetails:\nName: ${itemName}\n\nIf this is yours, please claim it via the TrustFound system.`;
     const filename = imagePath ? imagePath.split(/[\/\\]/).pop() : null;
     const fullImageUrl = filename ? `${process.env.SERVER_BASE_URL || 'http://localhost:5000'}/uploads/${filename}` : null;
 

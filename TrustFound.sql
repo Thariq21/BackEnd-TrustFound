@@ -90,6 +90,22 @@ CREATE TABLE `claim` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
+-- Table structure for table `claim_verification_answer`
+--
+
+CREATE TABLE `claim_verification_answer` (
+  `answer_id` int(11) NOT NULL,
+  `claim_id` int(11) NOT NULL,
+  `question_order` tinyint(3) unsigned NOT NULL,
+  `question_text` varchar(500) NOT NULL,
+  `answer_text` text NOT NULL,
+  UNIQUE KEY `uq_claim_verification_answer_order` (`claim_id`, `question_order`),
+  CONSTRAINT `chk_claim_verification_answer_order` CHECK (`question_order` BETWEEN 1 AND 10),
+  CONSTRAINT `chk_claim_verification_question_text` CHECK (char_length(trim(`question_text`)) BETWEEN 1 AND 500),
+  CONSTRAINT `chk_claim_verification_answer_text` CHECK (char_length(trim(`answer_text`)) > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
 -- Dumping data for table `claim`
 --
 
@@ -143,6 +159,8 @@ INSERT INTO `general_user` (`nim`, `univ_id`, `full_name`, `email`, `phone_numbe
 --
 -- Table structure for table `item`
 --
+-- Legacy detail columns are copied into the subtype tables below and dropped
+-- before the dump completes.
 
 CREATE TABLE `item` (
   `item_id` int(11) NOT NULL,
@@ -158,12 +176,50 @@ CREATE TABLE `item` (
   `found_date` date NOT NULL,
   `report_time` time DEFAULT NULL,
   `image_path` varchar(255) DEFAULT NULL,
-  `status` enum('pending','secured','claimed','donated') NOT NULL,
+  `status` enum('active','available','claimed','donated') NOT NULL DEFAULT 'available',
   `reviewed_by` int(11) DEFAULT NULL,
   `reviewed_at` datetime DEFAULT NULL,
   `rejection_reason` varchar(255) DEFAULT NULL,
   `rejection_note` text DEFAULT NULL,
   KEY `idx_item_review_status` (`report_review_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Table structure for table `item_verification_question`
+--
+
+CREATE TABLE `item_verification_question` (
+  `question_id` int(11) NOT NULL,
+  `item_id` int(11) NOT NULL,
+  `question_order` tinyint(3) unsigned NOT NULL,
+  `question_text` varchar(500) NOT NULL,
+  UNIQUE KEY `uq_item_verification_question_order` (`item_id`, `question_order`),
+  CONSTRAINT `chk_item_verification_question_order` CHECK (`question_order` BETWEEN 1 AND 10),
+  CONSTRAINT `chk_item_verification_question_text` CHECK (char_length(trim(`question_text`)) BETWEEN 1 AND 500)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Table structure for table `found_item`
+--
+
+CREATE TABLE `found_item` (
+  `item_id` int(11) NOT NULL,
+  `found_location` varchar(255) NOT NULL,
+  `found_date` date NOT NULL,
+  `found_time` time DEFAULT NULL,
+  KEY `found_item_fk1` (`item_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Table structure for table `lost_item`
+--
+
+CREATE TABLE `lost_item` (
+  `item_id` int(11) NOT NULL,
+  `lost_location` varchar(255) NOT NULL,
+  `lost_date` date NOT NULL,
+  `lost_time` time DEFAULT NULL,
+  KEY `lost_item_fk1` (`item_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -194,6 +250,27 @@ INSERT INTO `item` (`item_id`, `finder_nim`, `manage_nip`, `category_id`, `name`
 (30, 1232001059, 2314, 1, 'HandPhone', 'IPhone 13, warna biru dengan wallpaper juga biru', 'Ruang 10 Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-09', 'public/uploads/blur-1784031084974-780533294.jpg', 'secured'),
 (31, 1232001033, 2314, 1, 'Handphone', 'Iphone 17 Pro Max', 'Lobby Depan', 1, '2026-07-23', 'public/uploads/blur-1784830290971-135545449.jpg', 'secured'),
 (32, NULL, 2314, 2, 'Larparch', 'naniiii', 'Rumah Ireng', 1, '2026-09-11', 'public/uploads/blur-1789222803734-557373192.png', 'secured');
+
+--
+-- Preserve report details from the legacy item columns in their subtype tables
+--
+
+INSERT INTO `found_item` (`item_id`, `found_location`, `found_date`, `found_time`)
+SELECT `item_id`, `found_location`, `found_date`, `report_time`
+FROM `item`
+WHERE `report_type` = 'found';
+
+INSERT INTO `lost_item` (`item_id`, `lost_location`, `lost_date`, `lost_time`)
+SELECT `item_id`, `found_location`, `found_date`, `report_time`
+FROM `item`
+WHERE `report_type` = 'lost';
+
+ALTER TABLE `item`
+  DROP COLUMN `found_location`,
+  DROP COLUMN `found_date`,
+  DROP COLUMN `report_time`;
+
+-- --------------------------------------------------------
 
 -- --------------------------------------------------------
 
@@ -301,6 +378,12 @@ ALTER TABLE `claim`
   ADD KEY `claim_fk2` (`validator_nip`),
   ADD KEY `claim_fk3` (`item_id`);
 
+ALTER TABLE `claim_verification_answer`
+  ADD PRIMARY KEY (`answer_id`);
+
+ALTER TABLE `item_verification_question`
+  ADD PRIMARY KEY (`question_id`);
+
 --
 -- Indexes for table `general_user`
 --
@@ -318,6 +401,15 @@ ALTER TABLE `item`
   ADD KEY `item_fk1` (`finder_nim`),
   ADD KEY `item_fk2` (`manage_nip`),
   ADD KEY `item_fk3` (`category_id`);
+
+--
+-- Indexes for tables `found_item` and `lost_item`
+--
+ALTER TABLE `found_item`
+  ADD PRIMARY KEY (`item_id`);
+
+ALTER TABLE `lost_item`
+  ADD PRIMARY KEY (`item_id`);
 
 --
 -- Indexes for table `university`
@@ -354,6 +446,12 @@ ALTER TABLE `category`
 --
 ALTER TABLE `claim`
   MODIFY `claim_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
+
+ALTER TABLE `claim_verification_answer`
+  MODIFY `answer_id` int(11) NOT NULL AUTO_INCREMENT;
+
+ALTER TABLE `item_verification_question`
+  MODIFY `question_id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `general_user`
@@ -398,6 +496,9 @@ ALTER TABLE `claim`
   ADD CONSTRAINT `claim_fk3` FOREIGN KEY (`item_id`) REFERENCES `item` (`item_id`),
   ADD CONSTRAINT `claim_fk_slot` FOREIGN KEY (`scheduled_slot_id`) REFERENCES `pickup_slot` (`slot_id`) ON DELETE SET NULL;
 
+ALTER TABLE `claim_verification_answer`
+  ADD CONSTRAINT `claim_verification_answer_fk_claim` FOREIGN KEY (`claim_id`) REFERENCES `claim` (`claim_id`) ON DELETE CASCADE;
+
 --
 -- Constraints for table `general_user`
 --
@@ -411,6 +512,21 @@ ALTER TABLE `item`
   ADD CONSTRAINT `item_fk1` FOREIGN KEY (`finder_nim`) REFERENCES `general_user` (`nim`),
   ADD CONSTRAINT `item_fk2` FOREIGN KEY (`manage_nip`) REFERENCES `admin` (`nip`),
   ADD CONSTRAINT `item_fk3` FOREIGN KEY (`category_id`) REFERENCES `category` (`category_id`);
+
+--
+-- Constraints for table `found_item`
+--
+ALTER TABLE `found_item`
+  ADD CONSTRAINT `found_item_fk1` FOREIGN KEY (`item_id`) REFERENCES `item` (`item_id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `lost_item`
+--
+ALTER TABLE `lost_item`
+  ADD CONSTRAINT `lost_item_fk1` FOREIGN KEY (`item_id`) REFERENCES `item` (`item_id`) ON DELETE CASCADE;
+
+ALTER TABLE `item_verification_question`
+  ADD CONSTRAINT `item_verification_question_fk_item` FOREIGN KEY (`item_id`) REFERENCES `item` (`item_id`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

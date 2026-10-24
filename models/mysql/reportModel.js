@@ -5,18 +5,20 @@ const Report = {
     getFoundItemsReport: async (startDate, endDate) => {
         const query = `
             SELECT 
-                DATE_FORMAT(i.found_date, '%Y-%m-%d') as date,
+                DATE_FORMAT(fi.found_date, '%Y-%m-%d') as date,
                 i.name as item_name,
                 c.name as category,
-                i.found_location,
+                fi.found_location,
                 i.status,
                 COALESCE(u.full_name, 'Admin BEM') as reporter_name,
                 COALESCE(u.nim, '-') as reporter_nim
             FROM item i
+            JOIN found_item fi ON fi.item_id = i.item_id
             LEFT JOIN category c ON i.category_id = c.category_id
             LEFT JOIN general_user u ON i.finder_nim = u.nim
-            WHERE i.found_date BETWEEN ? AND ?
-            ORDER BY i.found_date ASC
+            WHERE i.report_type = 'found'
+            AND fi.found_date BETWEEN ? AND ?
+            ORDER BY fi.found_date ASC
         `;
         const [rows] = await db.execute(query, [startDate, endDate]);
         return rows;
@@ -50,15 +52,17 @@ const Report = {
     getDonatedItemsReport: async (startDate, endDate) => {
         const query = `
             SELECT 
-                DATE_FORMAT(i.found_date, '%Y-%m-%d') as found_date,
+                DATE_FORMAT(fi.found_date, '%Y-%m-%d') as found_date,
                 i.name as item_name,
                 c.name as category,
                 i.description
             FROM item i
+            JOIN found_item fi ON fi.item_id = i.item_id
             LEFT JOIN category c ON i.category_id = c.category_id
-            WHERE i.status = 'donated'
-            AND i.found_date BETWEEN ? AND ?
-            ORDER BY i.found_date ASC
+            WHERE i.report_type = 'found'
+            AND i.status = 'donated'
+            AND fi.found_date BETWEEN ? AND ?
+            ORDER BY fi.found_date ASC
         `;
         const [rows] = await db.execute(query, [startDate, endDate]);
         return rows;

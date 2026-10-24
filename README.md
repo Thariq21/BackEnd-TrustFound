@@ -53,7 +53,7 @@ Perintah tersebut menjalankan:
 - MariaDB pada port `3306`
 - MongoDB audit di jaringan Docker internal
 
-Database dan migrasi dijalankan otomatis ketika volume database dibuat pertama kali. Jika ingin mengulang inisialisasi database dari awal, hentikan layanan lalu hapus **volume Docker proyek** yang memang ingin di-reset; tindakan ini menghapus data database lokal.
+Database schema awal dijalankan otomatis ketika volume database dibuat pertama kali. File di folder `migrations/` perlu diterapkan pada database yang sudah berjalan; migrasi terbaru menambahkan pertanyaan verifikasi per barang dan snapshot jawaban klaim. Jika ingin mengulang inisialisasi database dari awal, hentikan layanan lalu hapus **volume Docker proyek** yang memang ingin di-reset; tindakan ini menghapus data database lokal.
 
 Uji status backend:
 
@@ -145,7 +145,7 @@ Keterangan:
 
 Email dikirim secara asynchronous sehingga response API tidak menunggu proses SMTP selesai. Setiap email berhasil/gagal dicatat di koleksi MongoDB `email_logs`.
 
-- Barang baru yang sudah diamankan (`secured`) dibroadcast ke seluruh email mahasiswa. Ini berlaku untuk pengamanan satu item, upload langsung oleh admin, dan batch secure.
+- Barang temuan langsung berstatus `available` setelah laporan diterima Admin BEM. Barang yang tersedia dibroadcast ke seluruh email mahasiswa.
 - Saat mahasiswa mengajukan klaim, mahasiswa menerima konfirmasi dan seluruh admin yang memiliki email menerima notifikasi untuk review.
 - Saat klaim disetujui/ditolak, mahasiswa menerima hasil keputusan.
 - Saat jadwal pickup dibuat, mahasiswa menerima tanggal, waktu, dan lokasi.
@@ -178,9 +178,9 @@ Keduanya berbeda:
 
 1. Laporan mahasiswa dibuat dengan `report_review_status=pending`.
 2. Admin menerima (`accepted`) atau menolak (`rejected`) laporan.
-3. Menerima laporan **tidak** berarti barang sudah diamankan.
-4. Barang temuan yang diterima harus diproses admin dari `pending` menjadi `secured`.
-5. Hanya barang temuan `secured` yang dapat diklaim.
+3. Saat laporan temuan diterima, status item otomatis menjadi `available`.
+4. Laporan barang hilang berstatus `active`; laporan tersebut bukan barang yang dapat diklaim.
+5. Hanya barang temuan `available` yang dapat diklaim.
 
 Barang yang tidak diklaim lebih dari 90 hari dapat dipindahkan otomatis ke status `donated` oleh cron job.
 
@@ -256,12 +256,12 @@ curl -X POST http://localhost:5000/api/items/reports `
 
 ### 4. Mengajukan klaim
 
-Barang harus sudah berstatus `secured`. Untuk endpoint yang memakai `:itemId`, kirim dua jawaban verifikasi sebagai array JSON. Bukti bersifat opsional dan field-nya `evidence`.
+Barang harus berstatus `available` dan memiliki pertanyaan verifikasi dari Admin BEM. Jumlah jawaban harus sama dengan jumlah pertanyaan (1–10). Bukti bersifat opsional dan field-nya `evidence`.
 
 ```powershell
 curl -X POST http://localhost:5000/api/items/123/claims `
   -H "Authorization: Bearer $token" `
-  -F 'answers=["Ciri khusus: goresan di bagian depan","Isi dompet: kartu mahasiswa"]' `
+  -F 'answers=["Ciri khusus: goresan di bagian depan"]' `
   -F "evidence=@C:\path\bukti.jpg"
 ```
 
@@ -269,13 +269,14 @@ Alternatif endpoint legacy `POST /api/claims` menerima `item_id` di form body. R
 
 ### 5. Alur admin dan QR handover
 
-1. Admin menerima laporan: `PATCH /api/admin/items/:id/approve`.
-2. Admin mengamankan barang: `PUT /api/admin/items/:id/secure` dengan body JSON opsional `{"is_sensitive":true}`.
-3. Admin memproses klaim: `PUT /api/admin/claims/:id/process` atau `PATCH /api/claims/:id`.
-4. Mahasiswa memilih slot dari `GET /api/slots?date=YYYY-MM-DD`.
-5. Mahasiswa membuat jadwal melalui `POST /api/schedules` atau `POST /api/claims/:id/schedule`.
-6. Mahasiswa mengambil QR melalui `GET /api/tickets/:claimId` atau `GET /api/v2/claims/:claimId/qr-token`.
-7. Admin BEM memvalidasi QR melalui `POST /api/tickets/validate` atau `POST /api/v2/claims/validate-qr`.
+1. Admin menerima laporan temuan dengan 1–10 pertanyaan: `PATCH /api/admin/items/:id/approve`, body `{"questions":["Sebutkan ciri khusus barang ini."]}`. Laporan hilang dapat diterima tanpa pertanyaan.
+2. Pertanyaan dan penerimaan laporan temuan disimpan dalam satu transaksi; statusnya otomatis menjadi `available`. Laporan hilang menjadi `active`.
+3. Barang temuan lama yang sudah diterima tetapi belum memiliki pertanyaan dapat dilengkapi melalui `PUT /api/admin/items/:id/verification-questions`.
+4. Admin memeriksa jawaban klaim dan memproses keputusan: `PUT /api/admin/claims/:id/process` atau `PATCH /api/claims/:id`.
+5. Mahasiswa memilih slot dari `GET /api/slots?date=YYYY-MM-DD`.
+6. Mahasiswa membuat jadwal melalui `POST /api/schedules` atau `POST /api/claims/:id/schedule`.
+7. Mahasiswa mengambil QR melalui `GET /api/tickets/:claimId` atau `GET /api/v2/claims/:claimId/qr-token`.
+8. Admin BEM memvalidasi QR melalui `POST /api/tickets/validate` atau `POST /api/v2/claims/validate-qr`.
 
 Token QR berlaku maksimal 30 menit dan hanya dapat digunakan oleh Admin BEM untuk handover.
 
@@ -322,8 +323,8 @@ Semua endpoint di bawah ini menggunakan prefix `/api`.
 | GET | `/admin/dashboard` atau `/admin/dashboard/stats` | Statistik dashboard |
 | GET | `/admin/items` | Semua item dan filter admin |
 | POST | `/admin/items` | Catat item langsung sebagai admin |
-| PUT | `/admin/items/:id/secure` | Ubah item pending menjadi secured |
-| PUT | `/admin/items/batch-secure` | Amankan beberapa item sekaligus |
+| PUT | `/admin/items/:id/secure` | Deprecated; mengembalikan 410 karena status tersedia ditetapkan saat laporan diterima |
+| PUT | `/admin/items/batch-secure` | Deprecated; mengembalikan 410 karena pemindahan status tidak lagi diperlukan |
 | PATCH | `/admin/items/:id/approve` | Terima laporan |
 | PATCH | `/admin/items/:id/reject` | Tolak laporan |
 | PATCH | `/admin/items/:id/restore` | Pulihkan laporan ditolak |

@@ -8,6 +8,7 @@ import {
     getClaimsAdmin,
     processClaim,
     approveItemReport,
+    configureItemVerificationQuestions,
     rejectItemReport,
     restoreRejectedItemReport
 } from '../controllers/adminController.js';
@@ -53,6 +54,7 @@ router.post('/items',
 // 3. Secure Item (Verifikasi barang dari user)
 router.put('/items/:id/secure', secureItem); 
 router.patch('/items/:id/approve', approveItemReport);
+router.put('/items/:id/verification-questions', configureItemVerificationQuestions);
 router.patch('/items/:id/reject', rejectItemReport);
 router.patch('/items/:id/restore', restoreRejectedItemReport);
 

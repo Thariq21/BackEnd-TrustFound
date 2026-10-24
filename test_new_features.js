@@ -53,24 +53,15 @@ async function runTests() {
 
 
         // =========================================================================
-        // TEST 3: Status Mapping & Intake Dua-Kecepatan (FR-02, FR-07)
+        // TEST 3: Status Mapping & Automatic Availability
         // =========================================================================
-        console.log('\n--- Test 3: Status Mapping & Batch Secure (FR-07) ---');
+        console.log('\n--- Test 3: Status Mapping & Automatic Availability ---');
         const itemsList = await Item.findAll('all');
         const sampleItem = itemsList[0];
         console.log(`✅ Sample item status: '${sampleItem.status}' -> display_status: '${sampleItem.display_status}'`);
 
-        // Test batchUpdateStatus (move pending items to secured)
-        // Check if there are any pending items
-        const pendingItems = itemsList.filter(i => i.status === 'pending');
-        console.log(`Current items waiting at Pos Satpam ('pending'): ${pendingItems.length}`);
-        
-        // If we move specific item or test batch secure
-        if (pendingItems.length > 0) {
-            const targetId = pendingItems[0].item_id;
-            const affected = await Item.batchUpdateStatus([targetId], 'secured', 1231001056);
-            console.log(`✅ Batch secured item ${targetId}: ${affected} row(s) updated.`);
-        }
+        const availableItems = itemsList.filter(i => i.report_type === 'found' && i.status === 'available');
+        console.log(`Found items available for claims: ${availableItems.length}`);
 
 
         // =========================================================================

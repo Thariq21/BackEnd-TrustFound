@@ -101,11 +101,12 @@ async function request(endpoint, { token, method = 'GET', body, expected = 200 }
 
 async function createReport(token, type, name) {
     const body = new FormData();
+    const reportDate = new Date().toISOString().slice(0, 10);
     body.set('type', type);
     body.set('name', name);
     body.set('category', 'general');
     body.set('location', location);
-    body.set('date', new Date().toISOString().slice(0, 10));
+    body.set('date', reportDate);
     body.set('time', '12:00');
     body.set('description', marker);
     body.set('photo', new Blob([image], { type: 'image/png' }), `${name}.png`);
@@ -118,6 +119,25 @@ async function createReport(token, type, name) {
     const itemId = response.data?.item_id;
     assert.ok(itemId, 'Report response must include data.item_id');
     createdItemIds.add(itemId);
+    assert.equal(response.data.report_type, type, 'Report response must preserve its report type');
+    assert.equal(
+        response.data[type === 'lost' ? 'lost_location' : 'found_location'],
+        location,
+        'Report response must include location in the matching subtype field'
+    );
+    const detailTable = type === 'lost' ? 'lost_item' : 'found_item';
+    const [details] = await connection.execute(
+        `SELECT ${type === 'lost' ? 'lost_location' : 'found_location'} AS location,
+                DATE_FORMAT(${type === 'lost' ? 'lost_date' : 'found_date'}, '%Y-%m-%d') AS report_date,
+                TIME_FORMAT(${type === 'lost' ? 'lost_time' : 'found_time'}, '%H:%i') AS report_time
+         FROM ${detailTable}
+         WHERE item_id = ?`,
+        [itemId]
+    );
+    assert.equal(details.length, 1, `${type} report must create one subtype row`);
+    assert.equal(details[0].location, location);
+    assert.equal(details[0].report_date, reportDate);
+    assert.equal(details[0].report_time, '12:00');
     return itemId;
 }
 
@@ -135,7 +155,12 @@ async function verifySchema() {
     const requiredColumns = [
         ['item', 'report_type'],
         ['item', 'report_review_status'],
-        ['item', 'report_time'],
+        ['found_item', 'found_location'],
+        ['found_item', 'found_date'],
+        ['found_item', 'found_time'],
+        ['lost_item', 'lost_location'],
+        ['lost_item', 'lost_date'],
+        ['lost_item', 'lost_time'],
         ['item', 'rejection_reason'],
         ['item', 'rejection_note'],
         ['item', 'reviewed_by'],
@@ -151,7 +176,15 @@ async function verifySchema() {
              WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
             [databaseName, table, column]
         );
-        assert.equal(rows.length, 1, `Missing ${table}.${column}; apply migrations 001-003 to the disposable database.`);
+        assert.equal(rows.length, 1, `Missing ${table}.${column}; apply migrations 001-005 to the disposable database.`);
+    }
+    for (const column of ['found_location', 'found_date', 'report_time']) {
+        const [rows] = await connection.execute(
+            `SELECT 1 FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'item' AND COLUMN_NAME = ?`,
+            [databaseName, column]
+        );
+        assert.equal(rows.length, 0, `Legacy item.${column} must be moved to a report subtype table.`);
     }
     const [statusRows] = await connection.execute(
         `SELECT COLUMN_TYPE FROM information_schema.COLUMNS
@@ -301,7 +334,7 @@ async function run() {
     const adminToken = adminLogin.token;
     assert.ok(studentToken && adminToken, 'Both logins must return top-level tokens');
     assert.equal(studentLogin.user?.role, 'MAHASISWA');
-    assert.equal(adminLogin.user?.role, 'ADMIN_BEM');
+    assert.equal(adminLogin.user?.role, 'Admin_BEM');
 
     await request('/api/home');
     const foundId = await createReport(studentToken, 'found', reportNames.found);
@@ -326,24 +359,30 @@ async function run() {
         body: { answers: ['Pending moderation', 'Must not claim'] },
         expected: 409
     });
-    const batchSecurePending = await request('/api/admin/items/batch-secure', {
-        method: 'PUT',
+    await request(`/api/admin/items/${foundId}/approve`, {
+        method: 'PATCH',
         token: adminToken,
-        body: { item_ids: [foundId] }
+        expected: 400
     });
-    assert.equal(batchSecurePending.data?.affected_rows, 0, 'Batch securing must not bypass report moderation');
     const approvedFound = await request(`/api/admin/items/${foundId}/approve`, {
         method: 'PATCH',
-        token: adminToken
+        token: adminToken,
+        body: {
+            questions: [
+                'Sebutkan satu ciri khusus barang ini.',
+                'Apa isi atau tanda yang hanya diketahui pemilik?'
+            ]
+        }
     });
     const approvedLost = await request(`/api/admin/items/${lostId}/approve`, {
         method: 'PATCH',
         token: adminToken
     });
     assert.equal(approvedFound.data?.report_review_status, 'accepted');
-    assert.equal(approvedFound.data?.status, 'pending', 'Accepting a report must not secure the physical item');
+    assert.equal(approvedFound.data?.status, 'available', 'Accepted found reports must become available immediately');
+    assert.equal(approvedFound.data?.claim_questions?.length, 2);
     assert.equal(approvedLost.data?.report_review_status, 'accepted');
-    assert.equal(approvedLost.data?.status, 'pending', 'Accepting a lost report must not change its physical status');
+    assert.equal(approvedLost.data?.status, 'active', 'Accepted lost reports remain active reports, not available items');
     const acceptedCatalog = await request(`/api/items?search=${encodeURIComponent(marker)}&category=general`);
     assert.ok(acceptedCatalog.data?.some((item) => String(item.item_id) === String(foundId)));
     assert.ok(acceptedCatalog.data?.some((item) => String(item.item_id) === String(lostId)));
@@ -352,6 +391,12 @@ async function run() {
         token: studentToken,
         body: { answers: ['Must not claim', 'Lost reports are not claimable'] },
         expected: 409
+    });
+    await request(`/api/items/${foundId}/claims`, {
+        method: 'POST',
+        token: studentToken,
+        body: { answers: ['Only one answer'] },
+        expected: 400
     });
 
     await request(`/api/admin/items/${foundId}/reject`, {
@@ -368,12 +413,19 @@ async function run() {
     });
     await request(`/api/admin/items/${foundId}/approve`, {
         method: 'PATCH',
-        token: adminToken
+        token: adminToken,
+        body: {
+            questions: [
+                'Sebutkan satu ciri khusus barang ini.',
+                'Apa isi atau tanda yang hanya diketahui pemilik?'
+            ]
+        }
     });
     await request(`/api/admin/items/${foundId}/secure`, {
         method: 'PUT',
         token: adminToken,
-        body: {}
+        body: {},
+        expected: 410
     });
 
     const intakeForm = new FormData();
@@ -390,11 +442,8 @@ async function run() {
     const intakeId = intake.data?.item_id;
     assert.ok(intakeId, 'Intake response must include data.item_id');
     createdItemIds.add(intakeId);
-    await request('/api/admin/items/batch-secure', {
-        method: 'PUT',
-        token: adminToken,
-        body: { item_ids: [intakeId] }
-    });
+    const intakeItem = await request(`/api/items/${intakeId}`);
+    assert.equal(intakeItem.data?.status, 'available', 'Admin intake items must be immediately available');
 
     const claim = await request(`/api/items/${foundId}/claims`, {
         method: 'POST',
@@ -405,6 +454,17 @@ async function run() {
     const claimId = claim.data?.claim_id;
     assert.ok(claimId, 'Claim response must include data.claim_id');
     createdClaimIds.add(claimId);
+    const adminClaims = await request('/api/admin/claims?status=all', {
+        token: adminToken
+    });
+    const createdClaim = adminClaims.data?.find((entry) => String(entry.claim_id) === String(claimId));
+    assert.deepEqual(
+        createdClaim?.verification_answers?.map(({ question, answer }) => [question, answer]),
+        [
+            ['Sebutkan satu ciri khusus barang ini.', 'E2E answer one'],
+            ['Apa isi atau tanda yang hanya diketahui pemilik?', 'E2E answer two']
+        ]
+    );
     await request(`/api/items/${foundId}/claims`, {
         method: 'POST',
         token: studentToken,

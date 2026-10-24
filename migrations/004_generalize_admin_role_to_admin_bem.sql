@@ -8,10 +8,10 @@ USE trustfound;
 ALTER TABLE `admin` 
   MODIFY COLUMN `role` VARCHAR(50) NOT NULL DEFAULT 'Admin_BEM';
 
--- 2. Update existing admin records with legacy roles ('super_admin', 'admin', 'satpam', 'ADMIN_BEM') to 'Admin_BEM'
+-- 2. Update existing admin records with legacy roles ('super_admin', 'admin', 'satpam', 'Admin_BEM') to 'Admin_BEM'
 UPDATE `admin` 
 SET `role` = 'Admin_BEM' 
-WHERE `role` IN ('super_admin', 'admin', 'satpam', 'ADMIN_BEM') OR `role` IS NULL;
+WHERE `role` IN ('super_admin', 'admin', 'satpam', 'Admin_BEM') OR `role` IS NULL;
 
 -- 3. Alter role column to ENUM strictly containing only 'Admin_BEM'
 ALTER TABLE `admin` 

@@ -44,12 +44,30 @@ const Claim = {
         try {
             await connection.beginTransaction();
             const [items] = await connection.execute(
-                "SELECT item_id FROM item WHERE item_id = ? AND report_type = 'found' AND report_review_status = 'accepted' AND status = 'secured' FOR UPDATE",
+                "SELECT item_id FROM item WHERE item_id = ? AND report_type = 'found' AND report_review_status = 'accepted' AND status = 'available' FOR UPDATE",
                 [claimData.item_id]
             );
             if (items.length === 0) {
                 await connection.rollback();
                 return { error: 'item_unavailable' };
+            }
+
+            const [questions] = await connection.execute(
+                `SELECT question_order, question_text FROM item_verification_question
+                 WHERE item_id = ? ORDER BY question_order`,
+                [claimData.item_id]
+            );
+            if (!questions.length) {
+                await connection.rollback();
+                return { error: 'questions_not_configured' };
+            }
+            if (
+                !Array.isArray(claimData.answers) ||
+                claimData.answers.length !== questions.length ||
+                claimData.answers.some((answer) => typeof answer !== 'string' || !answer.trim())
+            ) {
+                await connection.rollback();
+                return { error: 'invalid_answers' };
             }
 
             const [existing] = await connection.execute(
@@ -72,6 +90,19 @@ const Claim = {
                     claimData.evidence_path || null
                 ]
             );
+            for (const [index, question] of questions.entries()) {
+                await connection.execute(
+                    `INSERT INTO claim_verification_answer (
+                        claim_id, question_order, question_text, answer_text
+                     ) VALUES (?, ?, ?, ?)`,
+                    [
+                        result.insertId,
+                        question.question_order,
+                        question.question_text,
+                        claimData.answers[index].trim()
+                    ]
+                );
+            }
             await connection.commit();
             return { claim_id: result.insertId };
         } catch (error) {
@@ -145,6 +176,28 @@ const Claim = {
         query += ' ORDER BY FIELD(c.status, "pending", "verified", "scheduled", "claimed", "rejected"), c.create_at ASC';
 
         const [rows] = await db.execute(query, params);
+        if (rows.length) {
+            const placeholders = rows.map(() => '?').join(', ');
+            const [answers] = await db.execute(
+                `SELECT claim_id, question_order, question_text, answer_text
+                 FROM claim_verification_answer
+                 WHERE claim_id IN (${placeholders})
+                 ORDER BY claim_id, question_order`,
+                rows.map(({ claim_id }) => claim_id)
+            );
+            const answersByClaim = new Map();
+            for (const answer of answers) {
+                const claimAnswers = answersByClaim.get(answer.claim_id) || [];
+                claimAnswers.push({
+                    question: answer.question_text,
+                    answer: answer.answer_text
+                });
+                answersByClaim.set(answer.claim_id, claimAnswers);
+            }
+            for (const row of rows) {
+                row.verification_answers = answersByClaim.get(row.claim_id) || [];
+            }
+        }
         return rows.map(withEvidenceUrl);
     },
 
@@ -163,7 +216,7 @@ const Claim = {
                 i.name as item_name, 
                 i.image_path, 
                 i.status as item_status,
-                i.found_location,
+                fi.found_location,
                 cat.name as category_name,
                 ps.day_of_week as slot_day_of_week,
                 ps.start_time as slot_start_time,
@@ -171,6 +224,7 @@ const Claim = {
                 ps.location as slot_location
             FROM claim c
             JOIN item i ON c.item_id = i.item_id
+            LEFT JOIN found_item fi ON fi.item_id = i.item_id
             LEFT JOIN category cat ON i.category_id = cat.category_id
             LEFT JOIN pickup_slot ps ON c.scheduled_slot_id = ps.slot_id
             WHERE c.claimer_nim = ?
@@ -298,7 +352,7 @@ const Claim = {
                 return { error: 'claim_unavailable' };
             }
             if (newStatus === 'verified') {
-                if (claim.item_status !== 'secured' || claim.report_type !== 'found' || claim.report_review_status !== 'accepted') {
+                if (claim.item_status !== 'available' || claim.report_type !== 'found' || claim.report_review_status !== 'accepted') {
                     await connection.rollback();
                     return { error: 'item_unavailable' };
                 }
@@ -429,7 +483,7 @@ const Claim = {
             const updateClaimQuery = `
                 UPDATE item SET status = 'claimed'
                 WHERE item_id = ? AND report_type = 'found'
-                  AND report_review_status = 'accepted' AND status = 'secured'
+                  AND report_review_status = 'accepted' AND status = 'available'
             `;
             const [itemResult] = await connection.execute(updateClaimQuery, [itemId]);
             if (itemResult.affectedRows !== 1) {
