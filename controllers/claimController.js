@@ -8,6 +8,7 @@ import {
     sendClaimScheduledEmailAsync,
     sendClaimSubmittedToAdminsAsync
 } from '../services/emailService.js';
+import { getAllowedPickupDates } from '../lib/pickupScheduleDates.js';
 import Admin from '../models/mysql/adminModel.js';
 import fs from 'fs';
 
@@ -255,6 +256,12 @@ export const scheduleClaimPickup = async (req, res) => {
             dateObj.toISOString().slice(0, 10) !== scheduled_date
         ) {
             return res.status(400).json({ status: 'error', message: 'Invalid scheduled_date format. Expected YYYY-MM-DD.' });
+        }
+        if (!getAllowedPickupDates().some(({ date }) => date === scheduled_date)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Pickup date must be within the current scheduling period and cannot be today.'
+            });
         }
 
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

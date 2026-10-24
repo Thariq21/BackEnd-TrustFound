@@ -1,6 +1,7 @@
 import Slot from '../models/mysql/slotModel.js';
 import Claim from '../models/mysql/claimModel.js';
 import { sendClaimScheduleUpdatedEmailAsync } from '../services/emailService.js';
+import { getAllowedPickupDates } from '../lib/pickupScheduleDates.js';
 
 const getSlotDate = (value) => {
     if (!value) return null;
@@ -114,6 +115,12 @@ export const createSlot = async (req, res) => {
     }
     try {
         const slotDate = getSlotDate(req.body.date || req.body.slot_date);
+        if (slotDate && !getAllowedPickupDates().some(({ date }) => date === slotDate)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Pickup slots can only be created within the current scheduling period.'
+            });
+        }
         const dayOfWeek = slotDate
             ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(`${slotDate}T00:00:00Z`).getUTCDay()]
             : req.body.day_of_week;
@@ -145,6 +152,12 @@ export const updateSlot = async (req, res) => {
             ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(`${slotDate}T00:00:00Z`).getUTCDay()]
             : req.body.day_of_week || current.day_of_week;
         const next = { ...current, ...req.body, day_of_week: dayOfWeek, slot_date: slotDate };
+        if (slotDate && !getAllowedPickupDates().some(({ date }) => date === slotDate)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Pickup slots can only be updated within the current scheduling period.'
+            });
+        }
         if (!validSlotInput(next)) {
             return res.status(400).json({ status: 'error', message: 'Invalid pickup slot details' });
         }
