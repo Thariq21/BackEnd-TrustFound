@@ -450,7 +450,9 @@ const Claim = {
     // Find Claim by QR Token
     findByQRToken: async (token) => {
         const query = `
-            SELECT c.*, i.name as item_name, i.status as item_status, u.email as claimer_email
+            SELECT c.*, i.name as item_name, i.status as item_status,
+                   u.email as claimer_email, u.full_name as claimer_name,
+                   u.nim as claimer_nim
             FROM claim c
             JOIN item i ON c.item_id = i.item_id
             JOIN general_user u ON c.claimer_nim = u.nim

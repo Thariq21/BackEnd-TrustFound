@@ -53,7 +53,7 @@ Perintah tersebut menjalankan:
 - MariaDB pada port `3306`
 - MongoDB audit di jaringan Docker internal
 
-Database schema awal dijalankan otomatis ketika volume database dibuat pertama kali. File di folder `migrations/` perlu diterapkan pada database yang sudah berjalan; migrasi terbaru menambahkan pertanyaan verifikasi per barang dan snapshot jawaban klaim. Jika ingin mengulang inisialisasi database dari awal, hentikan layanan lalu hapus **volume Docker proyek** yang memang ingin di-reset; tindakan ini menghapus data database lokal.
+Database schema awal dijalankan otomatis ketika volume database dibuat pertama kali. Saat menggunakan Docker Compose, service `database-migrations` menerapkan migration `004` sampai `008` sebelum backend dijalankan dan mencatat migration yang sudah berhasil pada tabel `schema_migrations`. Jika ingin mengulang inisialisasi database dari awal, hentikan layanan lalu hapus **volume Docker proyek** yang memang ingin di-reset; tindakan ini menghapus data database lokal.
 
 Uji status backend:
 
@@ -85,12 +85,26 @@ npm install
 
 Salin `config/config.env.example` jika file contoh tersedia. Jika tidak, buat file `BackEnd-TrustFound/config/config.env` secara manual menggunakan contoh pada bagian [Konfigurasi environment](#konfigurasi-environment). Jangan menaruh kredensial di README atau melakukan commit terhadap file konfigurasi berisi secret.
 
-Jalankan skema dasar dan migrasi SQL berikut secara berurutan:
+Jalankan skema dasar dan migration SQL berikut secara berurutan:
 
 1. `TrustFound.sql`
 2. `migrations/001_pickup_slots_and_schedule.sql`
 3. `migrations/002_frontend_business_flow.sql`
 4. `migrations/003_frontend_report_moderation.sql`
+5. `migrations/004_generalize_admin_role_to_admin_bem.sql`
+6. `migrations/005_split_found_and_lost_item_details.sql`
+7. `migrations/006_simplify_item_availability.sql`
+8. `migrations/007_item_verification_questions.sql`
+9. `migrations/008_verification_question_constraints.sql`
+
+Untuk penggunaan Docker Compose, migration `004` sampai `008` dijalankan otomatis oleh service `database-migrations`. Jalankan:
+
+```powershell
+docker compose up -d --build
+docker compose logs -f database-migrations
+```
+
+Service backend hanya akan dimulai setelah service migration selesai dengan sukses. Migration yang sudah tercatat pada tabel `schema_migrations` akan dilewati pada proses berikutnya.
 
 Jalankan server:
 

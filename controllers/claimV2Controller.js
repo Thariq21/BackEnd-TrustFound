@@ -119,7 +119,16 @@ export const validateQR = async (req, res) => {
 
         res.status(200).json({
             status: 'success',
-            message: 'QR Code validated and item handover successful'
+            message: 'QR Code validated and item handover successful',
+            data: {
+                claim_id: claim.claim_id,
+                claimant_name: claim.claimer_name,
+                claimant_nim: claim.claimer_nim,
+                item_id: claim.item_id,
+                item_name: claim.item_name,
+                scheduled_date: claim.scheduled_date,
+                status: 'claimed',
+            }
         });
     } catch (error) {
         console.error('Error validating QR:', error);

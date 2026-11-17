@@ -105,23 +105,6 @@ CREATE TABLE `claim_verification_answer` (
   CONSTRAINT `chk_claim_verification_answer_text` CHECK (char_length(trim(`answer_text`)) > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `claim`
---
-
-INSERT INTO `claim` (`claim_id`, `claimer_nim`, `validator_nip`, `item_id`, `create_at`, `challange_answer`, `status`, `qr_token`, `qr_expires_at`, `processed_at`) VALUES
-(8, 1232001033, 2314, 10, '2026-01-09 13:14:09', 'Lecet dibagian tutup.', 'verified', NULL, NULL, '2026-01-09 13:15:05'),
-(9, 1232001011, 2314, 11, '2026-01-09 13:54:50', '-', 'verified', '3d903698ca45977d3f5a8484ad116d8eca8d711335c452e9dc9c3ecf1a9f9c05', '2026-07-07 15:35:10', '2026-01-09 14:03:10'),
-(10, 1232001035, 2314, 12, '2026-01-09 14:25:44', 'Tumbler berwana hitam dengan merk Stanley.', 'verified', NULL, NULL, '2026-01-09 14:28:00'),
-(13, 1232001022, 1231001056, 13, '2026-01-10 08:54:37', 'Terdapat KTP Bernama Thariq Rahman', 'verified', NULL, NULL, '2026-01-10 08:56:02'),
-(16, 1232001011, 2314, 16, '2026-06-11 16:53:25', 'Saya Lapar', 'verified', 'a19844298cef05ad24829638a81d16e0c9291357d07dab06cafc74cb31dbce2a', '2026-07-08 05:36:54', '2026-07-05 12:10:30'),
-(17, 1232001011, 2314, 17, '2026-07-07 05:36:36', 'warna coklat', 'claimed', NULL, NULL, '2026-07-07 11:59:15'),
-(18, 1232001011, 2314, 18, '2026-07-07 11:02:38', 'Isi ID card ada KTP, E-Money, dan Kartu akses centennial tower.\nNIK 3201112105050004', 'claimed', NULL, NULL, '2026-07-07 11:52:19'),
-(19, 1232001033, 1231001056, 25, '2026-07-14 12:16:09', 'Laptop Asus Vivobook 14X M1403QA dan ada Stiker Toriq di dalam laptopnya', 'claimed', NULL, NULL, '2026-07-14 12:26:36'),
-(20, 1232001011, NULL, 22, '2026-07-14 12:54:31', 'Smart Watch Merk Itel', 'pending', NULL, NULL, NULL),
-(21, 1232001033, 2314, 23, '2026-07-23 18:13:09', 'Terdapat goresan di bagian left side tws', 'claimed', NULL, NULL, '2026-07-23 18:21:46'),
-(22, 1232001011, NULL, 29, '2026-09-13 18:15:13', '-', 'pending', NULL, NULL, NULL),
-(23, 1232001011, NULL, 26, '2026-09-14 02:04:49', '-', 'pending', NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -152,7 +135,9 @@ INSERT INTO `general_user` (`nim`, `univ_id`, `full_name`, `email`, `phone_numbe
 (1232001041, 1231, 'Muhammad Faalih', '1232001041@student.bakrie.ac.id', '083167282880', '$2a$12$oWhKjyNnZi5A5DtG8IklKeIJ/e5HAsGiLrhR9QhAe6u168GOyTKzq', 'active'),
 (1232001044, 1231, 'Aditya Novadianto Pratama', '1232001044@student.bakrie.ac.id', '081292193758', '$2a$12$sxE.20B4bpo3zhEz9KUvJO5rGOGNzzVl3yEUIIjz4EQmOvqCaIaDq', 'active'),
 (1232001046, 1231, 'Dinda Nuraini', '1232001046@student.bakrie.ac.id', '085710201820', '$2a$12$z.lF7v6BwEd9BWfG3CigvO2tnMAftLTau86TZbIzSeGLpMQqxu3ZG', 'active'),
-(1232001059, 1231, 'Kayla El-Raudhia De Nato', '1232001059@student.bakrie.ac.id', '0821989321', '$2a$12$/ThwIb/nYaeLrsOE7T7VMucPMDQvXPhycA67Son4sM5IRTmqczlgm', 'active');
+(1232001059, 1231, 'Kayla El-Raudhia De Nato', '1232001059@student.bakrie.ac.id', '0821989321', '$2a$12$/ThwIb/nYaeLrsOE7T7VMucPMDQvXPhycA67Son4sM5IRTmqczlgm', 'active'),
+(1232001010, 1231, 'Najwa Naela Fawwa', '1232001010@student.bakrie.ac.id', '081234567890', '$2a$12$Q1DkxLtLlhCMnAiGhyhCBORiyi2rm3jHdA3dSgNydO/pdpGBjxWsS', 'active');
+
 
 -- --------------------------------------------------------
 
@@ -222,34 +207,6 @@ CREATE TABLE `lost_item` (
   KEY `lost_item_fk1` (`item_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `item`
---
-
-INSERT INTO `item` (`item_id`, `finder_nim`, `manage_nip`, `category_id`, `name`, `description`, `found_location`, `is_sensitive`, `found_date`, `image_path`, `status`) VALUES
-(10, 1232001033, 2314, 3, 'Tumbler', 'Tumbler Hitam, Merk Stanley', 'BT 90', 0, '2026-01-01', 'public/uploads/1767964244351-966310646.jpg', 'claimed'),
-(11, 1232001011, 2314, 3, 'Mouse Wireless', 'Mouse Hitam Merk Fantech serius Raigor III WG12R', 'Student Lounge Kampus Plaza Festival', 0, '2026-01-09', 'public/uploads/1767964355266-668940178.jpeg', 'claimed'),
-(12, 1232001035, 2314, 3, 'Tumbler', 'Tumbler berwana hitam, merk Stanley.', 'BT-90 Universitas Bakrie', 0, '2026-01-01', 'public/uploads/1767968199578-418582704.jpg', 'claimed'),
-(13, 1232001011, 1231001056, 2, 'Dompet', 'Dompet Hitam dengan KTP inisial TR', 'Student Lounge Kampus Bakrie Tower Lantai 90', 1, '2026-01-03', 'public/uploads/blur-1768034553495-212307680.jpeg', 'claimed'),
-(14, NULL, 2314, 3, 'Tumbler', 'Tumbler Putih Merk Corcircle', 'Lab B Kampus Plaza Festival', 0, '2025-01-05', 'public/uploads/1768034738738-395316710.jpeg', 'donated'),
-(15, 1232001011, 2314, 3, 'Tumbler Merah', 'Tumbler Lock&amp;Lock Warna Merah', 'Student Lounge Lobby Belakang Kampus Plaza Festival', 0, '2026-01-13', 'public/uploads/1768292810049-452765826.jpg', 'donated'),
-(16, 1232001011, 2314, 3, 'Indomie', 'Indomie Goreng rasa sate', 'Kost Toriq', 0, '2026-06-11', 'public/uploads/1781196640680-658356379.jpg', 'donated'),
-(17, 1232001011, 2314, 3, 'Kotak Bekel', 'Bekel Warna Krem Bentuk Tabung', 'Ruang 2 Kampus Plaza Festival', 0, '2026-07-01', 'public/uploads/1782883399365-479986345.jpeg', 'claimed'),
-(18, 1232001046, 2314, 2, 'ID Card', 'ID Card beserta Kartu Identitas Lainnya', 'Lab ICH&#x2F;Cisco Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-07', 'public/uploads/blur-1783421975736-503784796.jpg', 'claimed'),
-(19, NULL, 2314, 1, 'Komputer', 'Test', 'Lobi', 1, '2026-07-06', 'public/uploads/blur-1783426581083-868400644.png', 'secured'),
-(20, 1232001011, 2314, 1, 'Komputer', 'Detail barang ini ditemukan di lobi UBakrie', 'Lobi', 1, '2026-07-02', 'public/uploads/blur-1783426725353-583292545.png', 'secured'),
-(21, 1232001011, 2314, 1, 'Server', 'jahdjxhshshsusyssy', 'Ruang 09', 1, '2026-07-07', 'public/uploads/blur-1783426729436-755724623.jpg', 'secured'),
-(22, 1232001011, 2314, 1, 'Smart Watch', 'Smart Watch Warna Hitam &#x2F; Biru Dongker dengan Merk Itel', 'Ruang 2 Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-08', 'public/uploads/blur-1783874542985-408399125.jpeg', 'secured'),
-(23, 1232001022, 2314, 1, 'TWS', 'TWS Warna Hitam Merk SoundCore r50i', 'Student Lounge Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-09', 'public/uploads/blur-1783874704173-105762848.jpeg', 'claimed'),
-(24, 1232001032, 1231001056, 1, 'laptop', 'Laptop Dell beserta chargernya', 'Ruang 8 Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-06', 'public/uploads/blur-1783874775192-516355987.jpeg', 'secured'),
-(25, 1232001033, 2314, 1, 'Laptop', 'Laptop Asus Vivobook 14x M1403QA', 'Ruang 4 Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-07', 'public/uploads/blur-1783874834122-177695238.jpeg', 'claimed'),
-(26, 1232001046, 1231001056, 3, 'Sisir', 'Sisir Warna Hitam dan Hijau', 'Student Lounge Universitas Bakrie Kampus Bakrie Tower', 0, '2026-07-02', 'public/uploads/1783874909485-823066411.jpeg', 'secured'),
-(27, 1232001059, 1231001056, 3, 'Tumbler', 'Tumbler dengan motif stiker astronot', 'Student Lounge Universitas Bakrie Kampus Bakrie Tower', 0, '2026-07-03', 'public/uploads/1783875010282-992180945.jpeg', 'secured'),
-(28, 1232001035, 1231001056, 3, 'tumbler corkcicle', 'Tumbler Putih', 'Lobby Depan Universitas Bakrie Kampus Plaza Festival', 0, '2026-07-01', 'public/uploads/1783875294476-824505447.jpeg', 'secured'),
-(29, 1232001044, 2314, 3, 'Kotak Bekal', 'Kotak Bekal dengan Warna Crem dan terdapat tas untuk kotaknya', 'Student Lounge Universitas Bakrie Kampus Bakrie Tower Lantai 42', 0, '2026-07-04', 'public/uploads/1784030852451-695501778.jpg', 'secured'),
-(30, 1232001059, 2314, 1, 'HandPhone', 'IPhone 13, warna biru dengan wallpaper juga biru', 'Ruang 10 Universitas Bakrie Kampus Plaza Festival', 1, '2026-07-09', 'public/uploads/blur-1784031084974-780533294.jpg', 'secured'),
-(31, 1232001033, 2314, 1, 'Handphone', 'Iphone 17 Pro Max', 'Lobby Depan', 1, '2026-07-23', 'public/uploads/blur-1784830290971-135545449.jpg', 'secured'),
-(32, NULL, 2314, 2, 'Larparch', 'naniiii', 'Rumah Ireng', 1, '2026-09-11', 'public/uploads/blur-1789222803734-557373192.png', 'secured');
 
 --
 -- Preserve report details from the legacy item columns in their subtype tables
